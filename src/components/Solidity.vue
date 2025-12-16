@@ -1,21 +1,18 @@
 <script lang="ts">
-import Tree from './Tree.vue';
-import FlowChart from './FlowChart.vue';
 import SolidityEditor from './SolidityEditor.vue';
 import SolidityStatus from './SolidityStatus.vue';
-import { update } from 'lodash';
 import emitter from './EventBus';
 import { onMounted, onBeforeUnmount } from 'vue';
 import { ref } from 'vue';
 import { nextTick } from 'vue';
-import { ElMessage } from 'element-plus';
 import SolidityTree from './SolidityTree.vue';
 
 export default {
     name: 'App',
     components: {
-        Tree,
-        FlowChart,
+        SolidityTree,
+        SolidityEditor,
+        SolidityStatus
     },
 };
 </script>
