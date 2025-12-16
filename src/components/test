@@ -1,0 +1,528 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solidity智能合约解析器</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s ease;
+        }
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+        }
+        .slide-enter-active, .slide-leave-active {
+            transition: all 0.3s ease;
+        }
+        .slide-enter-from, .slide-leave-to {
+            transform: translateX(20px);
+            opacity: 0;
+        }
+        .code-editor {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .function-badge {
+            transition: all 0.2s ease;
+        }
+        .function-badge:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="app">
+        <!-- 头部导航 -->
+        <header class="bg-white shadow-lg sticky top-0 z-10">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-code text-2xl text-blue-600"></i>
+                        <h1 class="text-2xl font-bold text-gray-800">Solidity智能合约解析器</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button @click="toggleTheme" class="p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors">
+                            <i :class="isDark ? 'fas fa-sun' : 'fas fa-moon'" class="text-gray-700"></i>
+                        </button>
+                        <button @click="showHelp = true" class="p-2 rounded-full bg-blue-100 hover:bg-blue-200 transition-colors">
+                            <i class="fas fa-question text-blue-600"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="container mx-auto px-4 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 输入区域 -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Solidity代码输入</h2>
+                        <div class="flex space-x-2">
+                            <button @click="loadExample" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors">
+                            <i class="fas fa-file-code mr-2"></i>加载示例
+                        </button>
+                        <button @click="clearCode" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
+                            <i class="fas fa-trash mr-2"></i>清空
+                        </button>
+                    </div>
+                </div>
+                <div class="relative">
+                    <textarea 
+                        v-model="solidityCode" 
+                        placeholder="请输入Solidity智能合约代码..."
+                        class="w-full h-96 p-4 border border-gray-300 rounded-lg code-editor resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        spellcheck="false"
+                    ></textarea>
+                    <div class="absolute bottom-4 right-4">
+                        <button 
+                            @click="parseSolidity" 
+                            :disabled="!solidityCode.trim()"
+                            class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <i class="fas fa-cogs mr-2"></i>解析代码
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 解析结果区域 -->
+                <div class="bg-white rounded-xl shadow-lg p-6 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold text-gray-800">解析结果</h2>
+                        <div class="flex items-center space-x-4 text-sm text-gray-600">
+                            <span><i class="fas fa-cube mr-1"></i>合约: {{ contractName || '未识别' }}</span>
+                            <span><i class="fas fa-list mr-1"></i>函数: {{ functions.length }}</span>
+                            <span><i class="fas fa-database mr-1"></i>状态变量: {{ stateVariables.length }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 函数列表 -->
+                    <div v-if="functions.length > 0" class="mb-8">
+                        <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                            <i class="fas fa-functions text-blue-500 mr-2"></i>函数定义
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div 
+                                v-for="(func, index) in functions" 
+                                :key="index"
+                                class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                            >
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="font-mono text-blue-600 font-semibold">{{ func.name }}</span>
+                                    <span :class="getVisibilityClass(func.visibility)" class="px-2 py-1 rounded text-xs font-medium function-badge">
+                                        {{ func.visibility }}
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-600 mb-3">
+                                    <span v-if="func.stateMutability" class="px-2 py-1 bg-green-100 text-green-800 rounded mr-2">
+                                        {{ func.stateMutability }}
+                                    </span>
+                                    <span v-if="func.returns" class="px-2 py-1 bg-purple-100 text-purple-800 rounded">
+                                        返回: {{ func.returns }}
+                                    </span>
+                                </div>
+                                <div v-if="func.parameters.length > 0">
+                                    <p class="text-sm font-medium text-gray-700 mb-1">参数:</p>
+                                    <div class="space-y-1">
+                                        <div 
+                                            v-for="(param, pIndex) in func.parameters" 
+                                            :key="pIndex"
+                                            class="flex items-center text-sm"
+                                        >
+                                            <span class="font-mono text-gray-800 mr-2">{{ param.type }}</span>
+                                            <span class="text-gray-600">{{ param.name || '未命名' }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 状态变量 -->
+                    <div v-if="stateVariables.length > 0" class="mb-8">
+                        <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                            <i class="fas fa-database text-green-500 mr-2"></i>状态变量
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div 
+                                v-for="(variable, index) in stateVariables" 
+                                :key="index"
+                                class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                            >
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="font-mono text-gray-800">{{ variable.name }}</span>
+                                    <span :class="getVisibilityClass(variable.visibility)" class="px-2 py-1 rounded text-xs font-medium">
+                                        {{ variable.visibility }}
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-600">
+                                    <span class="font-mono">{{ variable.type }}</span>
+                                    <span v-if="variable.initialValue" class="ml-2 text-gray-500">= {{ variable.initialValue }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 空状态 -->
+                    <div v-if="!functions.length && !stateVariables.length" class="text-center py-12">
+                        <i class="fas fa-file-code text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500 text-lg">暂无解析结果</p>
+                        <p class="text-gray-400 mt-2">请输入Solidity代码并点击解析按钮</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 帮助模态框 -->
+        <div v-if="showHelp" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4">
+                        <div class="p-6 border-b border-gray-200">
+                            <h3 class="text-xl font-semibold text-gray-800">使用说明</h3>
+                        </div>
+                        <div class="p-6 max-h-96 overflow-y-auto">
+                            <div class="space-y-4">
+                                <div>
+                                    <h4 class="font-medium text-gray-700 mb-2">功能特性</h4>
+                                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                                <li>自动识别Solidity智能合约中的函数定义</li>
+                                <li>提取函数的参数列表和返回类型</li>
+                                <li>识别状态变量及其可见性</li>
+                                <li>支持函数修饰符和状态可变性分析</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="font-medium text-gray-700 mb-2">支持语法</h4>
+                                    <ul class="list-disc list-inside text-gray-600 space-y-1">
+                                <li>函数定义 (function)</li>
+                                <li>状态变量声明</li>
+                                <li>可见性修饰符 (public, private, internal, external)</li>
+                                <li>状态可变性 (view, pure, payable)</li>
+                                <li>构造函数和回退函数</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="p-6 border-t border-gray-200 flex justify-end">
+                        <button @click="showHelp = false" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                            我知道了
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+<code_end>
+
+<code_start project_name=solidity_parser filename=app.js title=Vue3应用逻辑和解析器 entrypoint=false runnable=false project_final_file=false>
+const { createApp } = Vue;
+
+const app = createApp({
+    data() {
+        return {
+            solidityCode: '',
+            contractName: '',
+            functions: [],
+            stateVariables: [],
+            isDark: false,
+            showHelp: false
+        }
+    },
+    mounted() {
+        this.loadFromLocalStorage();
+        this.loadExample();
+    },
+    methods: {
+        parseSolidity() {
+            try {
+                this.saveToLocalStorage();
+                
+                // 重置结果
+                this.functions = [];
+                this.stateVariables = [];
+                this.contractName = '';
+                
+                if (!this.solidityCode.trim()) {
+                    this.showNotification('请输入Solidity代码', 'error');
+                    return;
+                }
+                
+                // 提取合约名称
+                const contractMatch = this.solidityCode.match(/contract\s+(\w+)/);
+                if (contractMatch) {
+                    this.contractName = contractMatch[1];
+                }
+                
+                // 解析函数
+                this.parseFunctions();
+                
+                // 解析状态变量
+                this.parseStateVariables();
+                
+                this.showNotification('解析完成！', 'success');
+                
+            } catch (error) {
+                console.error('解析错误:', error);
+                this.showNotification('解析过程中发生错误', 'error');
+            }
+        },
+        
+        parseFunctions() {
+            const functionRegex = /function\s+(\w+)\s*\(([^)]*)\)\s*(?:public|private|internal|external)?\s*(?:view|pure|payable)?\s*(?:returns\s*\(([^)]*)\))?/g;
+            let match;
+            
+            while ((match = functionRegex.exec(this.solidityCode)) !== null) {
+                const funcName = match[1];
+                const paramsStr = match[2] || '';
+                const returnsStr = match[3] || '';
+                
+                // 跳过构造函数和回退函数
+                if (funcName === 'constructor' || funcName === 'fallback') continue;
+                
+                // 解析参数
+                const parameters = this.parseParameters(paramsStr);
+                
+                // 解析可见性
+                const visibility = this.parseVisibility(match[0]);
+                
+                // 解析状态可变性
+                const stateMutability = this.parseStateMutability(match[0]);
+                
+                // 解析返回类型
+                const returns = this.parseReturnType(returnsStr);
+                
+                this.functions.push({
+                    name: funcName,
+                    parameters: parameters,
+                    visibility: visibility,
+                    stateMutability: stateMutability,
+                    returns: returns
+                });
+            }
+        },
+        
+        parseStateVariables() {
+            const variableRegex = /(\w+)\s+(?:public|private|internal)?\s+(\w+)(?:\s*=\s*([^;]+))?/g;
+            let match;
+            
+            while ((match = variableRegex.exec(this.solidityCode)) !== null) {
+                const type = match[1];
+                const name = match[2];
+                const initialValue = match[3] ? match[3].trim() : null;
+                
+                // 过滤掉函数内的局部变量
+                if (this.isInFunction(match.index)) continue;
+                
+                // 解析可见性
+                const visibility = this.parseVisibility(match[0]);
+                
+                this.stateVariables.push({
+                    name: name,
+                    type: type,
+                    visibility: visibility,
+                    initialValue: initialValue
+                });
+            }
+        },
+        
+        parseParameters(paramsStr) {
+            if (!paramsStr.trim()) return [];
+            
+            return paramsStr.split(',').map(param => {
+                const parts = param.trim().split(/\s+/);
+                return {
+                    type: parts[0],
+                    name: parts[1] || ''
+                };
+            });
+        },
+        
+        parseReturnType(returnsStr) {
+            if (!returnsStr.trim()) return '';
+            
+            const types = returnsStr.split(',').map(type => type.trim());
+            return types.join(', ');
+        },
+        
+        parseVisibility(codeSnippet) {
+            if (codeSnippet.includes('public')) return 'public';
+            if (codeSnippet.includes('private')) return 'private';
+            if (codeSnippet.includes('internal')) return 'internal';
+            if (codeSnippet.includes('external')) return 'external';
+            return 'internal'; // 默认可见性
+        },
+        
+        parseStateMutability(codeSnippet) {
+            if (codeSnippet.includes('view')) return 'view';
+            if (codeSnippet.includes('pure')) return 'pure';
+            if (codeSnippet.includes('payable')) return 'payable';
+            return '';
+        },
+        
+        isInFunction(position) {
+            const codeBefore = this.solidityCode.substring(0, position);
+            const lastFunctionStart = codeBefore.lastIndexOf('function');
+            const lastBrace = codeBefore.lastIndexOf('{');
+            
+            return lastBrace > lastFunctionStart;
+        },
+        
+        getVisibilityClass(visibility) {
+            const classes = {
+                public: 'bg-green-100 text-green-800',
+                private: 'bg-red-100 text-red-800',
+                internal: 'bg-yellow-100 text-yellow-800',
+                external: 'bg-blue-100 text-blue-800'
+            };
+            return classes[visibility] || 'bg-gray-100 text-gray-800';
+        },
+        
+        loadExample() {
+            this.solidityCode = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleToken {
+    // 状态变量
+    string public name;
+    string public symbol;
+    uint8 public decimals = 18;
+    uint256 private _totalSupply;
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    address public owner;
+    
+    // 事件
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    
+    // 构造函数
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+        owner = msg.sender;
+    }
+    
+    // 函数
+    function totalSupply() public view returns (uint256) {
+        return _totalSupply;
+    }
+    
+    function balanceOf(address account) public view returns (uint256) {
+        return _balances[account];
+    }
+    
+    function transfer(address to, uint256 amount) public returns (bool) {
+        _transfer(msg.sender, to, amount);
+        return true;
+    }
+    
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public returns (bool) {
+        _spendAllowance(from, msg.sender, amount);
+        _transfer(from, to, amount);
+        return true;
+    }
+    
+    function approve(address spender, uint256 amount) public returns (bool) {
+        _approve(msg.sender, spender, amount);
+        return true;
+    }
+    
+    function allowance(address _owner, address spender) public view returns (uint256) {
+        return _allowances[_owner][spender];
+    }
+    
+    // 内部函数
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        require(from != address(0), "Transfer from zero address");
+        require(to != address(0), "Transfer to zero address");
+        require(_balances[from] >= amount, "Insufficient balance");
+        
+        _balances[from] -= amount;
+        _balances[to] += amount;
+        
+        emit Transfer(from, to, amount);
+    }
+    
+    function _approve(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal {
+        require(_owner != address(0), "Approve from zero address");
+        require(spender != address(0), "Approve to zero address");
+        
+        _allowances[_owner][spender] = amount;
+        emit Approval(_owner, spender, amount);
+    }
+    
+    function _spendAllowance(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal {
+        uint256 currentAllowance = _allowances[_owner][spender];
+        if (currentAllowance != type(uint256).max) {
+            require(currentAllowance >= amount, "Insufficient allowance");
+            _allowances[_owner][spender] = currentAllowance - amount;
+        }
+    }
+}`;
+        },
+        
+        clearCode() {
+            this.solidityCode = '';
+            this.functions = [];
+            this.stateVariables = [];
+            this.contractName = '';
+            localStorage.removeItem('solidityParserCode');
+        },
+        
+        toggleTheme() {
+            this.isDark = !this.isDark;
+            document.documentElement.classList.toggle('dark', this.isDark);
+        },
+        
+        saveToLocalStorage() {
+            localStorage.setItem('solidityParserCode', this.solidityCode);
+        },
+        
+        loadFromLocalStorage() {
+            const savedCode = localStorage.getItem('solidityParserCode');
+            if (savedCode) {
+                this.solidityCode = savedCode;
+            }
+        },
+        
+        showNotification(message, type) {
+            // 简单的通知实现
+            alert(`${type === 'success' ? '✅' : '❌'} ${message}`);
+        }
+    }
+});
+
+app.mount('#app');
+<code_end>
+
+<code_start project_name=solidity_parser filename=requirements.txt title=项目依赖文件 entrypoint=false runnable=false project_final_file=true>
+# 项目依赖说明
+# 这是一个纯前端项目，使用Vue3和TailwindCSS
+# 无需后端依赖，可直接在浏览器中运行
+<code_end>
+
+这个Vue3 Solidity解析器具有完整的智能合约分析功能：1. 提供现代化的代码编辑界面，支持语法高亮和实时解析；2. 智能识别合约中的函数定义、参数列表和返回类型；3. 自动提取状态变量及其可见性修饰符；4. 支持函数修饰符和状态可变性分析；5. 提供本地存储功能，自动保存用户代码；6. 包含响应式设计和友好的用户交互体验。
