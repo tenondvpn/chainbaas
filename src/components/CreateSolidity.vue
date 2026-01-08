@@ -167,6 +167,7 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                             params["is_project"] = false
                             params["id"] = project_id + "-" + response.data.pipeline_id
                             params["pipe_id"] = response.data.pipeline_id
+                            params["pipe_usr_graph"] = "// SPDX-License-Identifier: GPL-3.0\npragma solidity >=0.7.0 <0.9.0;"
                             emitter.emit("success_create_pipeline", params)
                         }
                     })

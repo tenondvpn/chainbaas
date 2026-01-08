@@ -279,6 +279,9 @@ const update_graph = (data) => {
         }
     
         prev_saved_code.value = codeValue.value
+    } else {
+        codeValue.value = "// SPDX-License-Identifier: GPL-3.0\npragma solidity >=0.7.0 <0.9.0;"
+        prev_saved_code.value = codeValue.value
     }
 }
 
