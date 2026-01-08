@@ -9,7 +9,7 @@
 
   <el-divider />
 
-  <el-button type="primary" @click="aiGenerate">AI生成流程图</el-button>
+  <el-button type="primary" @click="aiGenerate">AI生成合约图</el-button>
 </template>
 
 <script lang="ts" setup>

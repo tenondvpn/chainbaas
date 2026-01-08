@@ -10,7 +10,7 @@
             </el-col>
         </el-form-item>
 
-        <el-form-item label="流程名称" prop="pipeline_name">
+        <el-form-item label="合约名称" prop="pipeline_name">
             <el-input v-model="ruleForm.pipeline_name" />
         </el-form-item>
 
@@ -102,16 +102,16 @@
         </el-form-item>
 
         <el-form-item label="描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入任务流描述信息" />
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入合约流描述信息" />
         </el-form-item>
 
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button v-if="updatePipeline" type="primary" @click="submitForm(ruleFormRef)">
-                修改流程
+                修改合约
             </el-button>
             <el-button v-else type="primary" @click="submitForm(ruleFormRef)">
-                创建流程
+                创建合约
             </el-button>
             <el-button @click="resetForm(ruleFormRef)">重置参数</el-button>
         </el-form-item>
@@ -168,10 +168,10 @@ const ruleForm = reactive<RuleForm>({
 
 const rules = reactive<FormRules<RuleForm>>({
     project: [
-        { required: true, message: '请选择流程所在项目', trigger: 'blur' },
+        { required: true, message: '请选择合约所在项目', trigger: 'blur' },
     ],
     pipeline_name: [
-        { required: true, message: '请输入流程名称', trigger: 'blur' },
+        { required: true, message: '请输入合约名称', trigger: 'blur' },
         { min: 1, max: 64, message: '长度不超过64个字符。', trigger: 'blur' },
     ],
     ct_time: [
@@ -198,7 +198,7 @@ const rules = reactive<FormRules<RuleForm>>({
     timeout: [
         {
             required: true,
-            message: '请设置流程删除超时时间',
+            message: '请设置合约删除超时时间',
             trigger: 'change',
         },
     ],
@@ -212,7 +212,7 @@ const rules = reactive<FormRules<RuleForm>>({
     desc: [
         {
             required: true,
-            message: '请输入流程描述',
+            message: '请输入合约描述',
             trigger: 'change',
         },
     ],
@@ -268,25 +268,25 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/pipeline/update/' + ruleForm.pipeline_id + "/", qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.warning("修改流程失败: " + response.data.msg)
+                            ElMessage.warning("修改合约失败: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("修改流程成功！")
+                            ElMessage.success("修改合约成功！")
                             emitter.emit("success_update_pipeline", '')
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("修改流程失败: " + error)
+                        ElMessage.error("修改合约失败: " + error)
                     })
             } else {
                 axios
                     .post('/pipeline/create/', qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.error("创建流程失败: " + response.data.msg)
+                            ElMessage.error("创建合约失败: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("创建流程成功！")
+                            ElMessage.success("创建合约成功！")
                             params["pid"] = project_id
                             params["text"] = ruleForm.pipeline_name
                             params["is_project"] = false
@@ -296,7 +296,7 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("创建流程失败: " + error)
+                        ElMessage.error("创建合约失败: " + error)
                     })
             }
         } else {
@@ -333,7 +333,7 @@ const getProjectTree = async () => {
             treeData.value = response.data
         })
         .catch(error => {
-            ElMessage.error("创建流程失败: " + error)
+            ElMessage.error("创建合约失败: " + error)
         })
 }
 

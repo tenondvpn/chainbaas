@@ -7,11 +7,11 @@
                 trigger: 'blur',
             }">
             <el-row :gutter="37">
-                <el-select filterable v-model="item.pipeline" value-key="id" placeholder="请选择流程"
+                <el-select filterable v-model="item.pipeline" value-key="id" placeholder="请选择合约"
                     @change="(val) => handleChange(val, index)" style="width: 220px;margin-left: 18.5px; ">
                     <el-option v-for="titem in pipeline_options" :key="titem.id" :label="titem.name" :value="titem" />
                 </el-select>
-                <el-select filterable v-model="item.task" value-key="id" placeholder="请选择任务"
+                <el-select filterable v-model="item.task" value-key="id" placeholder="请选择合约"
                     style="width: 220px;margin-left: 2px;margin-right: 13px;">
                     <el-option v-for="titem in task_options[index]" :key="titem.id" :label="titem.name"
                         :value="titem" />

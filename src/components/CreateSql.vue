@@ -3,7 +3,7 @@
         label-position="left">
         <el-form-item prop="processor" required>
             <el-col :span="12">
-                <el-form-item prop="processor" label="选择模板任务" required>
+                <el-form-item prop="processor" label="选择模板合约" required>
                     <el-tree-select v-model="ruleForm.processor" lazy :load="load" :props="processor_props"
                         @change="handleSelectionChange" style="width: 240px" />
                 </el-form-item>
@@ -20,7 +20,7 @@
             </el-col>
         </el-form-item>
 
-        <el-form-item label="任务名称" prop="task_name">
+        <el-form-item label="合约名称" prop="task_name">
             <el-input v-model="ruleForm.task_name" />
         </el-form-item>
 
@@ -61,23 +61,23 @@
             </el-select>
             <!-- <ChoosePowerNodes ref="choose_power_nodes" /> -->
         </el-form-item>
-        <el-form-item label="任务描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入任务描述信息，DAG图中用于显示！" />
+        <el-form-item label="合约描述" prop="desc" required>
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入合约描述信息，DAG图中用于显示！" />
         </el-form-item>
         <el-divider border-style="dashed" />
 
-        <el-form-item label="任务参数" prop="configs">
+        <el-form-item label="合约参数" prop="configs">
             <CreateNodeConfig ref="config_vue" />
         </el-form-item>
         <el-divider border-style="dashed" />
-        <el-form-item label="依赖任务" prop="prev_task">
+        <el-form-item label="依赖合约" prop="prev_task">
             <CreateNodePrevTasks ref="prev_tasks_vue" />
         </el-form-item>
 
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button type="primary" @click="submitForm(ruleFormRef)">
-                创建任务
+                创建合约
             </el-button>
             <el-button @click="resetForm(ruleFormRef)">重置参数</el-button>
         </el-form-item>
@@ -181,13 +181,13 @@ const locationOptions = ['Home', 'Company', 'School']
 
 const rules = reactive<FormRules<RuleForm>>({
     processor: [
-        { required: true, message: '请选择模板任务', trigger: 'blur' },
+        { required: true, message: '请选择模板合约', trigger: 'blur' },
     ],
     processor_version: [
         { required: true, message: '请选择版本', trigger: 'blur' },
     ],
     task_name: [
-        { required: true, message: '请输入任务名称', trigger: 'blur' },
+        { required: true, message: '请输入合约名称', trigger: 'blur' },
         { min: 1, max: 30, message: '长度不超过30个字符。', trigger: 'blur' },
     ],
     configs: [
@@ -214,7 +214,7 @@ const rules = reactive<FormRules<RuleForm>>({
     timeout: [
         {
             required: true,
-            message: '请设置执行任务超时时间',
+            message: '请设置执行合约超时时间',
             trigger: 'change',
         },
     ],
@@ -235,7 +235,7 @@ const rules = reactive<FormRules<RuleForm>>({
     desc: [
         {
             required: true,
-            message: '请输入任务描述',
+            message: '请输入合约描述',
             trigger: 'change',
         },
     ],
@@ -307,15 +307,15 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                 .post('/pipeline/create_task/' + props.pipeline_id + '/', qs.stringify(params))
                 .then(response => {
                     if (response.status != 200 || response.data.status != 0) {
-                        ElMessage.warning("创建任务失败：" + response.data.info)
+                        ElMessage.warning("创建合约失败：" + response.data.info)
                     } else {
                         console.log(response.data)
                         emitter.emit("success_create_task", response.data.task)
-                        ElMessage.success("创建任务成功！")
+                        ElMessage.success("创建合约成功！")
                     }
                 })
                 .catch(error => {
-                    ElMessage.error("创建任务失败：" + error)
+                    ElMessage.error("创建合约失败：" + error)
                     console.log(error)
                 })
         } else {

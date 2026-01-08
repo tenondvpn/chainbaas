@@ -53,14 +53,14 @@
     </el-table-column>
 
     <el-table-column
-      label="流程名"
+      label="合约名"
       column-key="pl_name"
       min-width="20%"
       sortable
       header-align="center"
     >
       <template #header>
-        <span style="color: var(--el-color-primary)">流程组</span>
+        <span style="color: var(--el-color-primary)">合约组</span>
         <el-input
           clearable
           v-model="pl_name_search"
@@ -79,14 +79,14 @@
     </el-table-column>
 
     <el-table-column
-      label="任务名"
+      label="合约名"
       column-key="task_name"
       min-width="20%"
       sortable
       header-align="center"
     >
       <template #header>
-        <span style="color: var(--el-color-primary)">任务名</span>
+        <span style="color: var(--el-color-primary)">合约名</span>
         <el-input
           clearable
           v-model="task_name_search"
@@ -281,7 +281,7 @@
           style="width: 110px"
           @click="runSingleTask(scope.$index, scope.row)"
         >
-          重跑任务
+          重跑合约
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item @click.native="runAll(scope.$index, scope.row)"
@@ -324,13 +324,13 @@
       </template>
     </el-table-column>
     <el-table-column
-      label="任务管理"
+      label="合约管理"
       header-align="center"
       align="center"
       min-width="20%"
     >
       <template #header>
-        <span style="color: var(--el-color-primary)">任务管理</span>
+        <span style="color: var(--el-color-primary)">合约管理</span>
       </template>
       <template #default="scope" style="text-align: center">
         <el-button-group style="text-align: center">
@@ -369,7 +369,7 @@
     :append-to-body="true"
   >
     <template #header>
-      <h4>更新流程信息</h4>
+      <h4>更新合约信息</h4>
     </template>
     <template #default>
       <CreatePipelineVue :pipeline_info="pipeline_info" />
@@ -384,7 +384,7 @@
     :append-to-body="true"
   >
     <template #header>
-      <h4 style="width: 100px">更新任务配置</h4>
+      <h4 style="width: 100px">更新合约配置</h4>
     </template>
     <template #default>
       <CreateNode
@@ -426,7 +426,7 @@
     </template>
   </el-drawer>
 
-  <el-dialog v-model="history_graph_show" fullscreen title="全流程状态追踪">
+  <el-dialog v-model="history_graph_show" fullscreen title="全合约状态追踪">
     <div class="iframe-container" style="border: 0px">
       <iframe
         :src="history_graph_url"
@@ -487,7 +487,7 @@ const props = defineProps({
 
 // const multipleTableRef = ref<TableInstance>()
 const dynamicListHeight = ref(1000);
-const project_path = ref("我的流程");
+const project_path = ref("我的合约");
 const project_id = ref("1");
 const show_task_vue = ref(false);
 const drawer_direction = ref<DrawerProps["direction"]>("rtl");
@@ -635,7 +635,7 @@ const handleCheckAll = (val: CheckboxValueType) => {
 };
 
 const stopTask = (task_info) => {
-  ElMessageBox.confirm("确定要终止任务执行吗？", "提示", {
+  ElMessageBox.confirm("确定要终止合约执行吗？", "提示", {
     confirmButtonText: "确定",
     cancelButtonText: "取消",
     type: "warning",
@@ -650,18 +650,18 @@ const stopTask = (task_info) => {
           })
         )
         .then((response) => {
-          ElMessage.success("重跑任务成功！");
+          ElMessage.success("重跑合约成功！");
           load_data((curPage.value - 1) * curPageSize.value);
         })
         .catch((error) => {
-          ElMessage.success("重跑任务失败：" + error);
+          ElMessage.success("重跑合约失败：" + error);
         });
     })
     .catch((error) => {});
 };
 
 const runSingleTask = (index, task_info) => {
-  ElMessageBox.confirm("确定要重新执行任务吗？", "提示", {
+  ElMessageBox.confirm("确定要重新执行合约吗？", "提示", {
     confirmButtonText: "确定",
     cancelButtonText: "取消",
     type: "warning",
@@ -676,18 +676,18 @@ const runSingleTask = (index, task_info) => {
           })
         )
         .then((response) => {
-          ElMessage.success("重跑任务成功！");
+          ElMessage.success("重跑合约成功！");
           load_data((curPage.value - 1) * curPageSize.value);
         })
         .catch((error) => {
-          ElMessage.success("重跑任务失败：" + error);
+          ElMessage.success("重跑合约失败：" + error);
         });
     })
     .catch((error) => {});
 };
 
 const runAll = (index, task_info) => {
-  ElMessageBox.confirm("确定要重新执行整个流程吗？", "提示", {
+  ElMessageBox.confirm("确定要重新执行整个合约吗？", "提示", {
     confirmButtonText: "确定",
     cancelButtonText: "取消",
     type: "warning",
@@ -702,18 +702,18 @@ const runAll = (index, task_info) => {
           })
         )
         .then((response) => {
-          ElMessage.success("重跑流程成功！");
+          ElMessage.success("重跑合约成功！");
           load_data((curPage.value - 1) * curPageSize.value);
         })
         .catch((error) => {
-          ElMessage.success("重跑流程失败：" + error);
+          ElMessage.success("重跑合约失败：" + error);
         });
     })
     .catch((error) => {});
 };
 
 const runAllNext = (index, task_info) => {
-    ElMessageBox.confirm("确定要重新执行任务以及其后续任务吗？", "提示", {
+    ElMessageBox.confirm("确定要重新执行合约以及其后续合约吗？", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
         type: "warning",
@@ -728,18 +728,18 @@ const runAllNext = (index, task_info) => {
           })
         )
         .then((response) => {
-          ElMessage.success("重跑任务成功！");
+          ElMessage.success("重跑合约成功！");
           load_data((curPage.value - 1) * curPageSize.value);
         })
         .catch((error) => {
-          ElMessage.success("重跑任务失败：" + error);
+          ElMessage.success("重跑合约失败：" + error);
         });
     })
     .catch((error) => {});
 };
 
 const setSuccess = (index, task_info) => {
-  ElMessageBox.confirm("确定要将任务设置为成功吗？", "提示", {
+  ElMessageBox.confirm("确定要将合约设置为成功吗？", "提示", {
     confirmButtonText: "确定",
     cancelButtonText: "取消",
     type: "warning",
@@ -754,11 +754,11 @@ const setSuccess = (index, task_info) => {
           })
         )
         .then((response) => {
-          ElMessage.success("设置任务成功！");
+          ElMessage.success("设置合约成功！");
           load_data((curPage.value - 1) * curPageSize.value);
         })
         .catch((error) => {
-          ElMessage.success("设置任务失败：" + error);
+          ElMessage.success("设置合约失败：" + error);
         });
     })
     .catch((error) => {});
@@ -826,11 +826,11 @@ const options = [
   },
   {
     value: "2",
-    label: "重跑任务",
+    label: "重跑合约",
   },
   {
     value: "3",
-    label: "单跑任务和后续",
+    label: "单跑合约和后续",
   },
   {
     value: "4",
@@ -993,7 +993,7 @@ const emitterOn = () => {
 
     task_id_list = task_id_list.slice(0, -1);
     runt_time_list = runt_time_list.slice(0, -1);
-    ElMessageBox.confirm("确定要重新执行选中的所有任务吗？", "提示", {
+    ElMessageBox.confirm("确定要重新执行选中的所有合约吗？", "提示", {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       type: "warning",
@@ -1008,18 +1008,18 @@ const emitterOn = () => {
             })
           )
           .then((response) => {
-            ElMessage.success("重跑任务成功！");
+            ElMessage.success("重跑合约成功！");
             load_data((curPage.value - 1) * curPageSize.value);
           })
           .catch((error) => {
-            ElMessage.success("重跑任务失败：" + error);
+            ElMessage.success("重跑合约失败：" + error);
           });
       })
       .catch((error) => {});
   });
 
   emitter.on("batch_stop_table_tasks", (data) => {
-    ElMessageBox.confirm("确定要停止选中的所有任务吗？", "提示", {
+    ElMessageBox.confirm("确定要停止选中的所有合约吗？", "提示", {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       type: "warning",
@@ -1038,11 +1038,11 @@ const emitterOn = () => {
               load_data((curPage.value - 1) * curPageSize.value);
             })
             .catch((error) => {
-              ElMessage.success("停止任务失败：" + error);
+              ElMessage.success("停止合约失败：" + error);
             });
         }
 
-        ElMessage.success("停止所有任务成功！");
+        ElMessage.success("停止所有合约成功！");
       })
       .catch((error) => {});
   });

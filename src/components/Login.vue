@@ -178,7 +178,7 @@ export default {
             onLoginClick,
             onGetCodeClick,
             onTogglePanelStatus,
-            appName: computed(() => "智能计算平台"),
+            appName: computed(() => "seth-chainbaas"),
             device: computed(() => "store.state.app.device"),
         };
     },

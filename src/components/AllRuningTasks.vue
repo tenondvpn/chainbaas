@@ -137,7 +137,7 @@ import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 
 const cards = ref([
 {
-    title: '失败任务数',
+    title: '失败合约数',
     value: st_all_failes_count,
     unit: '个',
     trend: 18.9,
@@ -149,7 +149,7 @@ const cards = ref([
     }
   },
   {
-    title: '总计运行流程',
+    title: '总计运行合约',
     value: st_all_count,
     unit: '个',
     trend: 18.9,
@@ -161,7 +161,7 @@ const cards = ref([
     }
   },
   {
-    title: '我负责的流程',
+    title: '我负责的合约',
     value: st_all_my_count,
     unit: '个',
     trend: 12.5,
@@ -173,7 +173,7 @@ const cards = ref([
     }
   },
   {
-    title: '我创建的流程',
+    title: '我创建的合约',
     unit: '个',
     value: st_my_create_count,
     trend: -2.3,
@@ -185,7 +185,7 @@ const cards = ref([
     }
   },
   {
-    title: '运行中的任务',
+    title: '运行中的合约',
     value: st_runing_count,
     unit: '个',
     trend: 8.1,
@@ -197,7 +197,7 @@ const cards = ref([
     }
   },
   {
-    title: '成功任务数',
+    title: '成功合约数',
     value: st_handled_count,
     unit: '个',
     trend: 12.5,

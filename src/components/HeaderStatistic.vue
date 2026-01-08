@@ -60,8 +60,8 @@
                 <el-statistic :value="18800">
                     <template #title>
                         <div style="display: inline-flex; align-items: center">
-                            总任务数
-                            <el-tooltip effect="dark" content="全平台用户创建的任务数量！"
+                            总合约数
+                            <el-tooltip effect="dark" content="全平台用户创建的合约数量！"
                                 placement="top">
                                 <el-icon style="margin-left: 4px" :size="12">
                                     <Warning />
