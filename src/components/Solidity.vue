@@ -66,7 +66,7 @@ onMounted(() => {
 
 
 const project_path_str = ref('我的合约')
-const project_id = ref("46")
+const project_id = ref("68")
 const choosed_pipeline = ref(false)
 const choosed_pipeline_id = ref('')
 const dynamicMargin = ref(10000)
