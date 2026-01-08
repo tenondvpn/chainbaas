@@ -102,7 +102,7 @@ const toSetPrivateKey = () => {
 
 const CallGasPrepayment = () => {
     gas_waiting.value = true
-    axios.post(test_url + '/pipeline/set_gas_prepayment/', qs.stringify({
+    axios.post(test_url.value + '/pipeline/set_gas_prepayment/', qs.stringify({
         "gas_prepayment": gas_prepayment.value,
         "private_key": privateKey.value,
         "address": contract_address.value,
