@@ -126,7 +126,7 @@ const themeCompartment = new Compartment()
 const pipeline_id = ref();
 var second_timer = null;
 const prev_saved_code = ref('')
-const test_url = ref('http://127.0.0.1:7001')
+const test_url = ref('http://192.168.56.136:7001')
 
 const form = reactive({
     args: [],
@@ -159,7 +159,8 @@ emitter.on('update_soldity_height', (height: number | string) => {
 
 emitter.on('set_solidity_private_key', (key: string) => {
     run_loading.value = false
-    preivateKey.value = key;
+    preivateKey.value = key["prikey"];
+    test_url.value = key["url"];
 });
 
 emitter.on('compile_solidity_code', (code: string) => {

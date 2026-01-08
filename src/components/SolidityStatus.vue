@@ -63,7 +63,7 @@ const textarea = ref('')
 const contract_address = ref('')
 const visible = ref(false)
 const privateKey = ref('cefc2c33064ea7691aee3e5e4f7842935d26f3ad790d81cf015e79b78958e848')
-const test_url = ref('http://127.0.0.1:7001')
+const test_url = ref('http://192.168.56.136:7001')
 const logArea = ref(null);
 const gas_visible = ref(false)
 const gas_prepayment = ref(1000000)
@@ -93,7 +93,7 @@ const toCallFunction = () => {
 const toSetPrivateKey = () => {
     // axios.defaults.baseURL = test_url.value;
     visible.value = false
-    emitter.emit('set_solidity_private_key', privateKey.value);
+    emitter.emit('set_solidity_private_key', {"prikey": privateKey.value, "url": test_url.value} );
     ElMessage({
         type: 'success',
         message: '运行环境设置成功！',
