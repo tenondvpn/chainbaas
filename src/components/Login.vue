@@ -138,7 +138,7 @@ export default {
                 console.log("3")
                 ElMessage({title: "成功", type: "success", message:  "欢迎： " + loginForm.account})
                 emitter.emit('show_menu', true)
-                router.push('/pipeline'); // 登录成功后跳转到主页
+                router.push('/solidty'); // 登录成功后跳转到主页
             } catch (error) {
                 ElMessage({title: "失败", type: "danger", message:   "登录失败：" + error})
             }

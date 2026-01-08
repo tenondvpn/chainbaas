@@ -137,21 +137,6 @@ const handleLogout = async () => {
 
 };
 
-const toDashboard = () => {
-    router.push('/dashboard');
-}
-
-const toPipeline = () => {
-    router.push('/pipeline');
-}
-
-const toRuning = () => {
-    router.push('/runing');
-}
-
-const toProcessor = () => {
-    router.push('/processor');
-}
 
 const isDark = useDark();
 
