@@ -126,6 +126,7 @@ const themeCompartment = new Compartment()
 const pipeline_id = ref();
 var second_timer = null;
 const prev_saved_code = ref('')
+const test_url = ref('http://127.0.0.1:7001')
 
 const form = reactive({
     args: [],
@@ -164,7 +165,7 @@ emitter.on('set_solidity_private_key', (key: string) => {
 emitter.on('compile_solidity_code', (code: string) => {
     // run_loading.value = false
     axios
-        .post('/pipeline/compile_solidity/', qs.stringify({
+        .post(test_url + '/pipeline/compile_solidity/', qs.stringify({
             'source_code': codeValue.value,
         }))
         .then(response => {
@@ -394,7 +395,7 @@ function callFunction() {
     const selectedFunction = otherFunctions.value.find(func => func.name === form.function);
     if (selectedFunction.stateMutability == "view") {
         axios
-            .post('/pipeline/query_function_solidity/', qs.stringify({
+            .post(test_url + '/pipeline/query_function_solidity/', qs.stringify({
                 'address': contractAddress.value,
                 'function_name': form.function,
                 'function_types': types.join(','),
@@ -435,7 +436,7 @@ function callFunction() {
             })
     } else {
         axios
-            .post('/pipeline/call_function_solidity/', qs.stringify({
+            .post(test_url + '/pipeline/call_function_solidity/', qs.stringify({
                 'address': contractAddress.value,
                 'function_name': form.function,
                 'function_types': types.join(','),
@@ -491,7 +492,7 @@ function deploySolidity() {
     }
 
     axios
-        .post('/pipeline/compile_solidity/', qs.stringify({
+        .post(test_url + '/pipeline/compile_solidity/', qs.stringify({
             'source_code': codeValue.value,
         }))
         .then(response => {
@@ -524,7 +525,7 @@ function deploySolidity() {
             }
 
             axios
-                .post('/pipeline/deploy_solidity/', qs.stringify({
+                .post(test_url + '/pipeline/deploy_solidity/', qs.stringify({
                     'bytecode': response.data.bytecode,
                     'private_key': preivateKey.value,
                     'code_type': 0,
