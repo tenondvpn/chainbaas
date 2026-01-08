@@ -74,7 +74,7 @@ const toCompile = () => {
 }
 
 onMounted(() => {
-    axios.defaults.baseURL = test_url.value;
+    // axios.defaults.baseURL = test_url.value;
     emitterOn();
 });
 
