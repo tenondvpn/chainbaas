@@ -25,7 +25,7 @@ library.add(faUser, faHome, faCircleInfo, faTwitter, faGithub);
 
 
 // 设置 axios 的基础 URL
-axios.defaults.baseURL = 'http://82.156.224.174:7001';
+// axios.defaults.baseURL = 'http://82.156.224.174:7001';
 
 // 在应用启动时检查本地是否有 token
 const token = localStorage.getItem('access_token');

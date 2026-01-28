@@ -110,10 +110,7 @@ export default {
             delete axios.defaults.headers.common['Authorization'];
 
             try {
-            const authRequest = axios.create({
-                baseURL: '/' // 或者指向其他基础路径
-            });
-                const response = await authRequest.post('/rest_token/', {
+                const response = await axios.post('/rest_token/', {
                     username: loginForm.account,
                     password: md5(md5(md5(loginForm.password))),
                 });
