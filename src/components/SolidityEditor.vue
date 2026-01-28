@@ -166,7 +166,7 @@ emitter.on('set_solidity_private_key', (key: string) => {
 emitter.on('compile_solidity_code', (code: string) => {
     // run_loading.value = false
     axios
-        .post(test_url.value + '/pipeline/compile_solidity/', qs.stringify({
+        .post('/pipeline/compile_solidity/', qs.stringify({
             'source_code': codeValue.value,
         }))
         .then(response => {
@@ -396,7 +396,7 @@ function callFunction() {
     const selectedFunction = otherFunctions.value.find(func => func.name === form.function);
     if (selectedFunction.stateMutability == "view") {
         axios
-            .post(test_url.value + '/pipeline/query_function_solidity/', qs.stringify({
+            .post('/pipeline/query_function_solidity/', qs.stringify({
                 'address': contractAddress.value,
                 'function_name': form.function,
                 'function_types': types.join(','),
@@ -437,7 +437,7 @@ function callFunction() {
             })
     } else {
         axios
-            .post(test_url.value + '/pipeline/call_function_solidity/', qs.stringify({
+            .post('/pipeline/call_function_solidity/', qs.stringify({
                 'address': contractAddress.value,
                 'function_name': form.function,
                 'function_types': types.join(','),
@@ -493,7 +493,7 @@ function deploySolidity() {
     }
 
     axios
-        .post(test_url.value + '/pipeline/compile_solidity/', qs.stringify({
+        .post('/pipeline/compile_solidity/', qs.stringify({
             'source_code': codeValue.value,
         }))
         .then(response => {
@@ -526,7 +526,7 @@ function deploySolidity() {
             }
 
             axios
-                .post(test_url.value + '/pipeline/deploy_solidity/', qs.stringify({
+                .post('/pipeline/deploy_solidity/', qs.stringify({
                     'bytecode': response.data.bytecode,
                     'private_key': preivateKey.value,
                     'code_type': 0,
