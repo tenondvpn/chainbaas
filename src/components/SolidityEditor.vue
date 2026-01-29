@@ -482,7 +482,7 @@ function deploySolidity() {
     for (let arg of form.args) {
         if (arg.value.trim().length == 0) {
             ElMessage({
-                type: 'Warning',
+                type: 'warning',
                 message: 'Please enter parameter: ' + arg.key,
             })
             run_loading.value = false

@@ -1,7 +1,7 @@
 <template>
     <el-form ref="ruleFormRef" style="max-width: 750px;margin-left: 40px;" :model="ruleForm" :rules="rules" label-width="auto"
         label-position="left">
-        <el-form-item prop="project" label="选择项目" required>
+        <el-form-item prop="project" label="Select Project" required>
             <el-tree-select v-model="ruleForm.project" label="Select Project" lazy :load="load" :props="processor_props" check-strictly
                 :render-after-expand="false" style="width: 100%" />
         </el-form-item>
@@ -47,26 +47,26 @@
         </el-form-item>
         <el-divider border-style="dashed" />
 
-        <el-form-item label="模板合约参数" prop="configs">
+        <el-form-item label="Template Contract Parameters" prop="configs">
             <CreateNodeConfig ref="config_vue" :show_description="true" />
         </el-form-item>
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button v-if="update_processor" type="primary" @click="submitForm(ruleFormRef)" :icon="Edit">
-                修改模板合约
+                Update Template Contract
             </el-button>
             <el-button v-else type="primary" @click="submitForm(ruleFormRef)">
-                创建模板合约
+                Create Template Contract
             </el-button>
-            <el-popconfirm confirm-button-text="确定" cancel-button-text="取消" :icon="InfoFilled" icon-color="#626AEF"
-                title="确定删除模板合约吗?" @confirm="DeleteProcessor" @cancel="cancelEvent">
+            <el-popconfirm confirm-button-text="Confirm" cancel-button-text="Cancel" :icon="InfoFilled" icon-color="#626AEF"
+                title="Are you sure you want to delete this template contract?" @confirm="DeleteProcessor" @cancel="cancelEvent">
                 <template #reference>
                     <el-button v-if="update_processor" style="margin-left: 10px;" type="warning"
-                        :icon="Delete">删除模板合约</el-button>
+                        :icon="Delete">Delete Template Contract</el-button>
                 </template>
             </el-popconfirm>
 
-            <el-button @click="resetForm(ruleFormRef)" :icon="RefreshLeft">重置参数</el-button>
+            <el-button @click="resetForm(ruleFormRef)" :icon="RefreshLeft">Reset Parameters</el-button>
         </el-form-item>
     </el-form>
 </template>

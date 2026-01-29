@@ -4,7 +4,7 @@
         <el-menu-item index="0">
             <h3>SethChain-Baas</h3>
         </el-menu-item>
-        <el-tooltip class="box-item" content="solidity智能合约编辑管理！">
+        <el-tooltip class="box-item" content="Solidity smart contract editing and management!">
             <el-menu-item v-if="show_solidty" index="5" @click="toSolidty">Smart Contract</el-menu-item>
         </el-tooltip>
         <el-menu-item index="5" style="margin-top:0px" class="no-underline">
@@ -12,7 +12,7 @@
                 <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left: -12px;float:right;"
                     size="default" @change="toggleDark" />
             </el-tooltip>
-            <el-tooltip class="box-item" content="切换主题！">
+            <el-tooltip class="box-item" content="Switch theme!">
                 <el-color-picker size="small" style="margin-top:20px;margin-left: -19px;float:right;"
                     v-model="themeColor" show-alpha :predefine="predefineColors" @change="logColor" />
             </el-tooltip>
@@ -23,8 +23,8 @@
             </div>
             <template #dropdown>
                 <el-dropdown-menu>
-                    <!-- <el-dropdown-item command="settings">修改密码</el-dropdown-item> -->
-                    <el-dropdown-item v-if="show_menu" divided command="logout">退出登录</el-dropdown-item>
+                    <!-- <el-dropdown-item command="settings">Change Password</el-dropdown-item> -->
+                    <el-dropdown-item v-if="show_menu" divided command="logout">Logout</el-dropdown-item>
                 </el-dropdown-menu>
             </template>
         </el-dropdown>
@@ -53,14 +53,14 @@ import { ElNotification } from 'element-plus';
 const show_menu = ref(true)
 const show_solidty = ref(true)
 const checked1 = ref(true)
-// 从 localStorage 获取或设置默认主题色
+// Get or set default theme color from localStorage
 const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF');
 
-// 监听 themeColor 的变化
+// Watch for themeColor changes
 watch(themeColor, (newColor) => {
-    // 动态修改 Element UI 的 --el-color-primary 变量
+    // Dynamically modify Element UI's --el-color-primary variable
     document.documentElement.style.setProperty('--el-color-primary', newColor);
-    // 同时修改其他相关的颜色变量
+    // Also modify other related color variables
     document.documentElement.style.setProperty('--el-color-primary-light-3', newColor);
     document.documentElement.style.setProperty('--el-color-primary-light-5', newColor);
     document.documentElement.style.setProperty('--el-color-primary-light-7', newColor);
@@ -81,27 +81,27 @@ onBeforeUnmount(() => {
     emitterOff();
 })
 
-// 保存颜色到 localStorage
+// Save color to localStorage
 const saveTheme = () => {
     localStorage.setItem('themeColor', themeColor.value);
 };
 
 function logColor(val) {
-    console.log('颜色已更新:', val)
-    // document.documentElement 是全局变量时
+    console.log('Color updated:', val)
+    // When document.documentElement is a global variable
     const el = document.documentElement
     // const el = document.getElementById('xxx')
 
-    // 获取 css 变量
+    // Get CSS variable
     getComputedStyle(el).getPropertyValue(`--el-color-primary`)
 
-    // 设置 css 变量
+    // Set CSS variable
     el.style.setProperty('--el-color-primary', val)
     themeColor.value = val;
     saveTheme()
 }
 
-// 页面加载时，应用保存的颜色
+// Apply saved color on page load
 document.documentElement.style.setProperty('--el-color-primary', themeColor.value);
 
 const router = useRouter();
@@ -114,12 +114,12 @@ const handleCommand = async (command) => {
             });
 
             localStorage.setItem('access_token', '')
-            axios.defaults.headers.common['Authorization'] = ''; // 设置默认请求头
-            ElMessage.success('已退出登录');
+            axios.defaults.headers.common['Authorization'] = ''; // Set default request header
+            ElMessage.success('Logged out successfully');
             show_menu.value = true
-            router.push('/login'); // 登录成功后跳转到主页
+            router.push('/login'); // Redirect to home page after successful login
         } catch (error) {
-            ElNotification({ title: "出现错误", message: "退出失败：" + error, type: "danger", position: 'top-left', })
+            ElNotification({ title: "Error", message: "Logout failed: " + error, type: "danger", position: 'top-left', })
         }
     }
 };

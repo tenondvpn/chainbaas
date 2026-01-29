@@ -742,6 +742,10 @@ const GetProjectsAndPipelines = async () => {
             console.log("0 get_project_tree_async:", response)
             // var json_obj = JSON.parse(response)
             for (const item of response.data) {
+                if (item.text == "我的合约") {
+                    item.text = "My Contracts"
+                }
+
                 appendNode(-1, item);
                 if (item.is_project && projectToCopy.value == -1) {
                     projectToCopy.value = item.id

@@ -487,7 +487,7 @@ const props = defineProps({
 
 // const multipleTableRef = ref<TableInstance>()
 const dynamicListHeight = ref(1000);
-const project_path = ref("我的合约");
+const project_path = ref("Test Contracts");
 const project_id = ref("1");
 const show_task_vue = ref(false);
 const drawer_direction = ref<DrawerProps["direction"]>("rtl");

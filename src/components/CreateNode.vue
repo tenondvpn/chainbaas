@@ -3,7 +3,7 @@
         label-position="left">
         <el-form-item  prop="processor" required>
             <el-col :span="11">
-                <el-form-item prop="processor" label="选择模板合约" required>
+                <el-form-item prop="processor" label="Select Template Contract" required>
                     <el-tree-select v-model="ruleForm.processor" lazy :load="load" :props="processor_props"
                         @change="handleSelectionChange" style="width: 240px" :disabled="update_task" />
                 </el-form-item>
@@ -11,7 +11,7 @@
             <el-col :span="1">
             </el-col>
             <el-col :span="10">
-                <el-form-item prop="processor_version" label="选择版本" required>
+                <el-form-item prop="processor_version" label="Select Version" required>
                     <el-select v-model="ruleForm.processor_version" value-key="id" placeholder="Select"
                         @change="changeTaskInfo"
                         style="width: 240px">
@@ -21,97 +21,97 @@
                 </el-form-item>
             </el-col>
             <el-col :span="2">
-                        <el-tooltip class="box-item" effect="dark" content="点击查看模板合约文件列表！">
+                        <el-tooltip class="box-item" effect="dark" content="Click to view template contract file list!">
             <el-button  type="primary" @click="show_detail = true" style="margin-top:-3px;margin-left: 3px;" :icon="Files" plain></el-button>
         </el-tooltip>    
         </el-col>
         </el-form-item>
 
-        <el-form-item label="合约名称" prop="task_name">
+        <el-form-item label="Contract Name" prop="task_name">
             <el-input v-model="ruleForm.task_name" />
         </el-form-item>
 
-        <el-form-item label="失败重复次数:" prop="retry_times" style="margin-top: 17px">
+        <el-form-item label="Retry Count:" prop="retry_times" style="margin-top: 17px">
             <div style="margin-top: -10px">
                 <el-radio-group v-model="retry_times_radio">
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;不重试&nbsp;&nbsp;&nbsp;" value="1" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;重试一次&nbsp;&nbsp;" value="2" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;重试五次&nbsp;&nbsp;&nbsp;" value="3" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;一直重试&nbsp;&nbsp;&nbsp;" value="4" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;No Retry&nbsp;&nbsp;&nbsp;" value="1" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Retry Once&nbsp;&nbsp;" value="2" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Retry 5 Times&nbsp;&nbsp;&nbsp;" value="3" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Retry Always&nbsp;&nbsp;&nbsp;" value="4" />
                 </el-radio-group>
             </div>
         </el-form-item>
 
-        <el-form-item label="优先级:" prop="priority" style="margin-top: 17px">
+        <el-form-item label="Priority:" prop="priority" style="margin-top: 17px">
             <div style="margin-top: -10px">
                 <el-radio-group v-model="priority_radio">
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;最高&nbsp;&nbsp;&nbsp;" value="10" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;重要&nbsp;&nbsp;" value="9" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;一般&nbsp;&nbsp;&nbsp;" value="8" />
-                    <el-radio-button label="&nbsp;&nbsp;低优先级&nbsp;" value="7" />
-                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;最低&nbsp;&nbsp;&nbsp;" value="6" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Highest&nbsp;&nbsp;&nbsp;" value="10" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Important&nbsp;&nbsp;" value="9" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Normal&nbsp;&nbsp;&nbsp;" value="8" />
+                    <el-radio-button label="&nbsp;&nbsp;Low&nbsp;" value="7" />
+                    <el-radio-button label="&nbsp;&nbsp;&nbsp;&nbsp;Lowest&nbsp;&nbsp;&nbsp;" value="6" />
                 </el-radio-group>
             </div>
         </el-form-item>
 
-        <el-form-item label="执行超时时间" prop="timeout">
+        <el-form-item label="Execution Timeout" prop="timeout">
             <el-input-number v-model="ruleForm.timeout" :step="10">
                 <template #suffix>
-                    <span>分钟</span>
+                    <span>Minutes</span>
                 </template>
             </el-input-number>
         </el-form-item>
-        <el-form-item label="选择算力集群" prop="power_tag">
-            <el-select filterable v-model="ruleForm.power_tag" value-key="id" placeholder="请选择算力集群标签"
+        <el-form-item label="Select Compute Cluster" prop="power_tag">
+            <el-select filterable v-model="ruleForm.power_tag" value-key="id" placeholder="Please select compute cluster tag"
                 style="width: 223px;margin-right:6px;">
                 <el-option v-for="item in power_options" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
             <!-- <ChoosePowerNodes ref="choose_power_nodes" /> -->
         </el-form-item>
-        <el-form-item label="合约描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入合约描述信息，DAG图中用于显示！" />
+        <el-form-item label="Contract Description" prop="desc" required>
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="Please enter contract description, displayed in DAG graph!" />
         </el-form-item>
-        <el-form-item v-if="taskType === TaskTypes.TYPE_SHELL" label="shell命令"
+        <el-form-item v-if="taskType === TaskTypes.TYPE_SHELL" label="Shell Command"
             prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入shell命令，可以多行！" />
-        </el-form-item>
-
-        <el-form-item v-if="taskType === TaskTypes.TYPE_CLICKHOUSE" label="ck-sql命令"
-            prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入clickhouse的SQL命令，可以多行！" />
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter shell command, multi-line supported!" />
         </el-form-item>
 
-        <el-form-item v-if="taskType === TaskTypes.TYPE_ODPS" label="odps-sql命令"
+        <el-form-item v-if="taskType === TaskTypes.TYPE_CLICKHOUSE" label="CK-SQL Command"
             prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入odps的SQL命令，可以多行！" />
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter ClickHouse SQL command, multi-line supported!" />
+        </el-form-item>
+
+        <el-form-item v-if="taskType === TaskTypes.TYPE_ODPS" label="ODPS-SQL Command"
+            prop="shell" required>
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter ODPS SQL command, multi-line supported!" />
         </el-form-item>
         <el-divider border-style="dashed" />
 
-        <el-form-item label="合约参数" prop="configs">
+        <el-form-item label="Contract Parameters" prop="configs">
             <CreateNodeConfig ref="config_vue" :show_description="false" />
         </el-form-item>
         <el-divider border-style="dashed" />
-        <el-form-item label="依赖合约" prop="prev_task">
+        <el-form-item label="Dependent Contracts" prop="prev_task">
             <CreateNodePrevTasks ref="prev_tasks_vue" />
         </el-form-item>
 
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button v-if="update_task" type="primary" @click="submitForm(ruleFormRef)" :icon="Edit">
-                修改合约
+                Update Contract
             </el-button>
             <el-button v-else type="primary" @click="submitForm(ruleFormRef)">
-                创建合约
+                Create Contract
             </el-button>
-            <el-popconfirm confirm-button-text="确定" cancel-button-text="取消" :icon="InfoFilled" icon-color="#626AEF"
-                title="确定删除合约吗?" @confirm="DeleteTask" @cancel="cancelEvent">
+            <el-popconfirm confirm-button-text="Confirm" cancel-button-text="Cancel" :icon="InfoFilled" icon-color="#626AEF"
+                title="Are you sure you want to delete this contract?" @confirm="DeleteTask" @cancel="cancelEvent">
                 <template #reference>
                     <el-button v-if="update_task" style="margin-left: 10px;" type="warning"
-                        :icon="Delete">删除合约</el-button>
+                        :icon="Delete">Delete Contract</el-button>
                 </template>
             </el-popconfirm>
 
-            <el-button @click="resetForm(ruleFormRef)" :icon="RefreshLeft">重置参数</el-button>
+            <el-button @click="resetForm(ruleFormRef)" :icon="RefreshLeft">Reset Parameters</el-button>
         </el-form-item>
     </el-form>
         <el-drawer v-model="show_detail" :direction="drawer_direction" size="80%" :destroy-on-close="true"
@@ -242,14 +242,14 @@ const ruleForm = reactive<RuleForm>({
 
 const rules = reactive<FormRules<RuleForm>>({
     processor: [
-        { required: true, message: '请选择模板合约', trigger: 'blur' },
+        { required: true, message: 'Please select a template contract', trigger: 'blur' },
     ],
     processor_version: [
-        { required: true, message: '请选择版本', trigger: 'blur' },
+        { required: true, message: 'Please select a version', trigger: 'blur' },
     ],
     task_name: [
-        { required: true, message: '请输入合约名称', trigger: 'blur' },
-        { min: 1, max: 30, message: '长度不超过30个字符。', trigger: 'blur' },
+        { required: true, message: 'Please enter contract name', trigger: 'blur' },
+        { min: 1, max: 30, message: 'Length cannot exceed 30 characters.', trigger: 'blur' },
     ],
     configs: [
         {
@@ -261,21 +261,21 @@ const rules = reactive<FormRules<RuleForm>>({
     retry_times: [
         {
             required: true,
-            message: '选择失败重试次数',
+            message: 'Select retry count',
             trigger: 'change',
         },
     ],
     priority: [
         {
             required: true,
-            message: '请设置优先级',
+            message: 'Please set priority',
             trigger: 'change',
         },
     ],
     timeout: [
         {
             required: true,
-            message: '请设置执行合约超时时间',
+            message: 'Please set execution timeout',
             trigger: 'change',
         },
     ],
@@ -289,21 +289,21 @@ const rules = reactive<FormRules<RuleForm>>({
     power_tag: [
         {
             required: false,
-            message: '请选择算力集群',
+            message: 'Please select compute cluster',
             trigger: 'change',
         },
     ],
     desc: [
         {
             required: true,
-            message: '请输入合约描述',
+            message: 'Please enter contract description',
             trigger: 'change',
         },
     ],
     shell: [
         {
             required: true,
-            message: '请输入shell命令',
+            message: 'Please enter shell command',
             trigger: 'change',
         },
     ],
@@ -463,15 +463,15 @@ const DeleteTask = () => {
         .post('/pipeline/delete_task/' + props.pipeline_id + '/', qs.stringify(params))
         .then(response => {
             if (response.status != 200 || response.data.status != 0) {
-                ElMessage.warning("删除合约失败：" + response.data.info)
+                ElMessage.warning("Failed to delete contract: " + response.data.info)
             } else {
                 console.log(response.data)
                 emitter.emit("delete_task_success", props.task_info.task.id)
-                ElMessage.success("删除合约成功！")
+                ElMessage.success("Contract deleted successfully!")
             }
         })
         .catch(error => {
-            ElMessage.error("创建合约失败：" + error)
+            ElMessage.error("Failed to delete contract: " + error)
             console.log(error)
         })
 }
@@ -530,15 +530,15 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/pipeline/update_task/' + props.task_info.task.id + '/', qs.stringify(params))
                     .then(response => {
                         if (response.status != 200 || response.data.status != 0) {
-                            ElMessage.warning("修改合约失败：" + response.data.msg)
+                            ElMessage.warning("Failed to update contract: " + response.data.msg)
                         } else {
                             console.log(response.data)
                             emitter.emit("update_task_success", response.data.task)
-                            ElMessage.success("修改合约成功！")
+                            ElMessage.success("Contract updated successfully!")
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("修改合约失败：" + error)
+                        ElMessage.error("Failed to update contract: " + error)
                         console.log(error)
                     })
             } else {
@@ -546,15 +546,15 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/pipeline/create_task/' + props.pipeline_id + '/', qs.stringify(params))
                     .then(response => {
                         if (response.status != 200 || response.data.status != 0) {
-                            ElMessage.warning("创建合约失败：" + response.data.msg)
+                            ElMessage.warning("Failed to create contract: " + response.data.msg)
                         } else {
                             console.log(response.data)
                             emitter.emit("success_create_task", response.data.task)
-                            ElMessage.success("创建合约成功！")
+                            ElMessage.success("Contract created successfully!")
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("创建合约失败：" + error)
+                        ElMessage.error("Failed to create contract: " + error)
                         console.log(error)
                     })
             }

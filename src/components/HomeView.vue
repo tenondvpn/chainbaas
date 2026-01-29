@@ -1,9 +1,9 @@
 <template>
   <el-empty style="margin-top: 100px;">
-    <el-text class="mx-1" type="primary">当前项目路径：{{ project_path }}</el-text>
+    <el-text class="mx-1" type="primary">Current Project Path: {{ project_path }}</el-text>
     <el-divider border-style="dashed" />
-    <el-button v-if="is_processor" size="large" type="primary" :icon="Plus" @click="crate_pipeline">创建模板合约</el-button>
-    <el-button v-else size="large" type="primary" :icon="Plus" @click="crate_pipeline">创建合约</el-button>
+    <el-button v-if="is_processor" size="large" type="primary" :icon="Plus" @click="crate_pipeline">Create Template Contract</el-button>
+    <el-button v-else size="large" type="primary" :icon="Plus" @click="crate_pipeline">Create Contract</el-button>
   </el-empty>
 </template>
 
