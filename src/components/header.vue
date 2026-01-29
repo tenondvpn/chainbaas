@@ -12,7 +12,7 @@ const dateData = reactive<DateDataType>({
 });
 
 const { setSettingShow} =useSettingStore()
-const weekday= ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+const weekday= ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const timeFn = () => {
   dateData.timing = setInterval(() => {
     dateData.dateDay = dayjs().format("YYYY-MM-DD hh : mm : ss");
@@ -29,14 +29,14 @@ timeFn()
     <div class="guang"></div>
     <div class="d-flex jc-center">
       <div class="title">
-        <span class="title-text">实验平台可视化大屏</span>
+        <span class="title-text">Visualized Dashboard for Experimental Platform</span>
       </div>
     </div>
     <div class="timers">
       {{ dateData.dateYear }} {{ dateData.dateWeek }} {{ dateData.dateDay }}
 
       <div class="setting_icon"   @click="setSettingShow(true)">
-          <img src="../assets/img/headers/setting.png" alt="设置">
+          <img src="../assets/img/headers/setting.png" alt="Settings">
       </div>
     </div>
   </div>

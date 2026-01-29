@@ -1,23 +1,23 @@
 <template>
   <div>
-    <h2>用户注册</h2>
+    <h2>User Registration</h2>
     <form @submit.prevent="handleRegister">
       <div>
-        <label>用户名:</label>
+        <label>Username:</label>
         <input v-model="username" type="text" required />
       </div>
       <div>
-        <label>密码:</label>
+        <label>Password:</label>
         <input v-model="password" type="password" required />
       </div>
       <div>
-        <label>确认密码:</label>
+        <label>Confirm Password:</label>
         <input v-model="confirmPassword" type="password" required />
       </div>
-      <button type="submit">注册</button>
+      <button type="submit">Register</button>
     </form>
         <el-button plain @click="toLogin">
-      登录
+      Login
     </el-button>
     <p v-if="message">{{ message }}</p>
   </div>
@@ -26,7 +26,7 @@
 <script setup>
 import { ref } from 'vue';
 import axios from 'axios';
-import router from '../router/index.js'; // 假设你使用了 Vue Router
+import router from '../router/index.js'; // Assuming you are using Vue Router
 
 const username = ref('');
 const password = ref('');
@@ -35,7 +35,7 @@ const message = ref('');
 
 const handleRegister = async () => {
   if (password.value !== confirmPassword.value) {
-    message.value = '两次输入的密码不一致！';
+    message.value = 'Passwords do not match!';
     return;
   }
 
@@ -45,13 +45,13 @@ const handleRegister = async () => {
       password: password.value,
     });
     message.value = response.data.message;
-    // 注册成功后可以进行页面跳转
+    // Redirect after successful registration
   } catch (error) {
-    message.value = '注册失败：' + (error.response?.data?.message || '网络错误');
+    message.value = 'Registration failed: ' + (error.response?.data?.message || 'Network error');
   }
 };
 
 const toLogin = () => {
-    router.push('/login'); // 登录成功后跳转到主页
+    router.push('/login'); // Redirect to login page
 }
 </script>

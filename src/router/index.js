@@ -2,7 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Register from '../components/Register.vue';
 import Login from '../components/Login.vue';
-import Userinfo from '../components/UserInfo.vue'; // 登录后跳转的页面
+import Userinfo from '../components/UserInfo.vue'; // Page to redirect after login
 import emitter from '../components/EventBus';
 import Solidity from '../components/Solidity.vue';
 
@@ -21,7 +21,7 @@ const router = createRouter({
 const whiteList = ['/external', '/public']
 
 
-// 路由守卫：检查用户是否登录
+// Route guard: check if user is logged in
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title || 'seth'
   console.log("each url: ", to.path)

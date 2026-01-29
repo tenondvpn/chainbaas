@@ -30,21 +30,21 @@
                         <div v-if="node.data.is_project">
                             <span class="node-buttons">
                                 <el-button-group class="ml-4">
-                                    <el-tooltip class="box-item" effect="dark" content="点击新建文件夹！">
+                                    <el-tooltip class="box-item" effect="dark" content="Click to create a new folder!">
                                         <el-button plain type="info" size="small" :icon="Folder"
                                             @click="callCreateProject(node)" />
                                     </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="点击新建合约！">
+                                    <el-tooltip class="box-item" effect="dark" content="Click to create a new contract!">
                                         <el-button plain type="success" size="small" :icon="Plus"
                                             @click="addPipelineClicked(node)" />
                                     </el-tooltip>
-                                    <el-tooltip v-if="node.label != '我的合约'" class="box-item" effect="dark"
-                                        content="编辑分类">
+                                    <el-tooltip v-if="node.label != 'My Contracts'" class="box-item" effect="dark"
+                                        content="Edit category">
                                         <el-button plain type="primary" size="small" :icon="Edit"
                                             @click="callUpdateProject(node)" />
                                     </el-tooltip>
-                                    <el-tooltip v-if="node.label != '我的合约'" class="box-item" effect="dark"
-                                        content="删除分类">
+                                    <el-tooltip v-if="node.label != 'My Contracts'" class="box-item" effect="dark"
+                                        content="Delete category">
                                         <el-button plain type="warning" size="small" :icon="Delete"
                                             @click="deleteProject(node)" />
                                     </el-tooltip>
@@ -54,15 +54,15 @@
                         <div v-else>
                             <span class="node-buttons">
                                 <el-button-group class="ml-4">
-                                    <el-tooltip class="box-item" effect="dark" content="点击编辑合约信息！">
+                                    <el-tooltip class="box-item" effect="dark" content="Click to edit contract information!">
                                         <el-button plain type="primary" @click="addPipelineClicked(node)" size="small"
                                             :icon="Edit" />
                                     </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="点击删除合约！">
+                                    <el-tooltip class="box-item" effect="dark" content="Click to delete contract!">
                                         <el-button plain type="warning" size="small" :icon="Delete"
                                             @click="clickDeletePipeline(node)" />
                                     </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="点击拷贝合约">
+                                    <el-tooltip class="box-item" effect="dark" content="Click to copy contract">
                                         <el-button plain type="primary" @click="copyPipelineClicked(node)" size="small"
                                             :icon="CopyDocument" />
                                     </el-tooltip>
@@ -86,7 +86,7 @@
 
     <el-drawer v-model="createProject" :direction="drawer_direction" size="50%" :destroy-on-close="true">
         <template #header>
-            <h4>创建项目文件夹</h4>
+            <h4>Create Project Folder</h4>
         </template>
         <template #default>
             <CreateFolder :current_folder_info="selectedProject" />
@@ -95,7 +95,7 @@
 
     <el-drawer v-model="updateProject" :direction="drawer_direction" size="50%" :destroy-on-close="true">
         <template #header>
-            <h4>修改项目文件夹</h4>
+            <h4>Update Project Folder</h4>
         </template>
         <template #default>
             <UpdateFolder :current_folder_info="selectedProject" />
@@ -104,17 +104,17 @@
 
     <el-dialog
         v-model="centerDialogVisible"
-        title="拷贝合约"
+        title="Copy Contract"
         width="500"
         destroy-on-close
         center>
         <span>
             <el-form :model="form" label-width="auto" style="max-width: 600px" :label-position="labelPosition">
-                <el-form-item prop="project" label="选择项目">
+                <el-form-item prop="project" label="Select Project">
                     <el-tree-select v-model="projectToCopy" :data="treeData"  check-strictly
                                 node-key="id" />
                 </el-form-item>
-                <el-form-item label="新合约名">
+                <el-form-item label="New Contract Name">
                     <el-input v-model="pipelineNameToCopy" />
                 </el-form-item>
             </el-form>
@@ -122,9 +122,9 @@
 
         <template #footer>
         <div class="dialog-footer" style="margin-top: 20px">
-            <el-button @click="centerDialogVisible = false">取消</el-button>
+            <el-button @click="centerDialogVisible = false">Cancel</el-button>
             <el-button type="primary" @click="callCopyPipeline">
-            确认
+            Confirm
             </el-button>
         </div>
         </template>
@@ -155,9 +155,9 @@ const treeHeight = ref(0);
 let resizeObserver = null;
 const query = ref('')
 const treeRef = ref()
-const project_path = ref('我的合约')
+const project_path = ref('My Contracts')
 const project_id = ref('1')
-const openPipelineModelTitle = ref("创建合约")
+const openPipelineModelTitle = ref("Create Contract")
 const pipeline_detail = ref({})
 const showed_init_expand = ref(false)
 const selectedPipelineValue = {
@@ -213,7 +213,7 @@ emitter.on('create_folder', (data) => {
             if (response.data.status != 0) {
                 ElMessage({
                     type: 'error',
-                    message: '创建项目文件夹失败：' + response.data.msg,
+                    message: 'Failed to create project folder: ' + response.data.msg,
                 })
             } else {
                 createProject.value = false
@@ -227,22 +227,22 @@ emitter.on('create_folder', (data) => {
                     pid = -1
                 }
                 if (data['type'] == 0) {
-                    // 子目录
+                    // Subdirectory
                     appendNode(data["selected_id"], data)
                 } else {
-                    // 平级目录
+                    // Peer directory
                     appendNode(pid, data)
                 }
                 ElMessage({
                     type: 'success',
-                    message: '创建项目文件夹成功！',
+                    message: 'Project folder created successfully!',
                 })
             }
         })
         .catch(error => {
             ElMessage({
                 type: 'error',
-                message: '创建项目文件夹失败：' + error,
+                message: 'Failed to create project folder: ' + error,
             })
         })
 })
@@ -257,7 +257,7 @@ emitter.on('update_folder', (node_data) => {
             if (response.data.status != 0) {
                 ElMessage({
                     type: 'error',
-                    message: '修改项目文件夹失败：' + response.data.msg,
+                    message: 'Failed to update project folder: ' + response.data.msg,
                 })
             } else {
                 updateProject.value = false
@@ -274,14 +274,14 @@ emitter.on('update_folder', (node_data) => {
 
                 ElMessage({
                     type: 'success',
-                    message: '修改项目文件夹成功！',
+                    message: 'Project folder updated successfully!',
                 })
             }
         })
         .catch(error => {
             ElMessage({
                 type: 'error',
-                message: '修改项目文件夹失败：' + error,
+                message: 'Failed to update project folder: ' + error,
             })
         })
 })
@@ -308,7 +308,7 @@ emitter.on('show_graph_called', (data) => {
 })
 
 emitter.on('click_show_pipeline', (key) => {
-    openPipelineModelTitle.value = "修改合约"
+    openPipelineModelTitle.value = "Update Contract"
     axios
         .post('/pipeline/get_pipeline_detail/', qs.stringify({
             'pipe_id': key.split("-")[1],
@@ -377,7 +377,7 @@ const getProjectTree = async () => {
             treeData.value = response.data
         })
         .catch(error => {
-            ElMessage.error("创建合约失败: " + error)
+            ElMessage.error("Failed to create contract: " + error)
         })
 }
 
@@ -385,7 +385,7 @@ const callCopyPipeline = () => {
     if (pipelineNameToCopy.value.trim() == "") {
         ElMessage({
             type: 'warning',
-            message: "请输入新的合约名",
+            message: "Please enter a new contract name",
         })
         return;
     }
@@ -402,7 +402,7 @@ const callCopyPipeline = () => {
             if (response.data.status != 0) {
                 ElMessage({
                     type: 'danger',
-                    message: "拷贝合约失败：" + response.data.msg,
+                    message: "Failed to copy contract: " + response.data.msg,
                 })
             } else {
                 centerDialogVisible.value = false
@@ -416,14 +416,14 @@ const callCopyPipeline = () => {
                 appendNode(projectToCopy.value, params)
                 ElMessage({
                     type: 'success',
-                    message: "拷贝合约成功！",
+                    message: "Contract copied successfully!",
                 })
             }
         })
         .catch(error => {
             ElMessage({
                 type: 'danger',
-                message: "拷贝合约失败：" + error,
+                message: "Failed to copy contract: " + error,
             })
         })
 }
@@ -451,18 +451,18 @@ const callUpdateProject = (node) => {
 
 const deleteProject = (node) => {
     ElMessageBox({
-        title: '删除项目文件夹',
+        title: 'Delete Project Folder',
         message: h('p', null, [
-            h('span', null, '确定要删除项目文件夹吗? 项目文件夹名： '),
+            h('span', null, 'Are you sure you want to delete this project folder? Folder name: '),
             h('i', { style: 'color: red' }, node.label),
         ]),
         showCancelButton: true,
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
+        confirmButtonText: 'Confirm',
+        cancelButtonText: 'Cancel',
         beforeClose: (action, instance, done) => {
             if (action === 'confirm') {
                 instance.confirmButtonLoading = true
-                instance.confirmButtonText = '正在删除...'
+                instance.confirmButtonText = 'Deleting...'
                 axios
                     .post('/processor/delete_project/', qs.stringify({
                         'project_id': node.data.id,
@@ -471,12 +471,12 @@ const deleteProject = (node) => {
                         if (response.data.status != 0) {
                             ElMessage({
                                 type: 'danger',
-                                message: "项目文件夹删除失败：" + response.data.msg,
+                                message: "Failed to delete project folder: " + response.data.msg,
                             })
                         } else {
                             ElMessage({
                                 type: 'success',
-                                message: "项目文件夹删除成功！",
+                                message: "Project folder deleted successfully!",
                             })
                             handleDelete(node)
                         }
@@ -487,7 +487,7 @@ const deleteProject = (node) => {
                     .catch(error => {
                         ElMessage({
                             type: 'danger',
-                            message: "项目文件夹删除失败：" + error,
+                            message: "Failed to delete project folder: " + error,
                         })
                     })
             } else {
@@ -538,7 +538,7 @@ const handleNodeExpand = (nodeData, nodeInstance) => {
 }
 
 const addPipelineClicked = (nodeData) => {
-    openPipelineModelTitle.value = "创建合约"
+    openPipelineModelTitle.value = "Create Contract"
     selectedPipeline.value = structuredClone(selectedPipelineValue);
     console.log("ttttt:", nodeData.key)
     var str_key = "" + nodeData.key
@@ -556,7 +556,7 @@ const addPipelineClicked = (nodeData) => {
         return;
     }
 
-    openPipelineModelTitle.value = "修改合约"
+    openPipelineModelTitle.value = "Update Contract"
     axios
         .post('/pipeline/get_pipeline_detail/', qs.stringify({
             'pipe_id': nodeData.key.split("-")[1],
@@ -593,6 +593,7 @@ const handleDelete = (node) => {
 
     if (parentNode) {
         // 从父节点的 children 数组中移除该节点
+        // Remove the node from the parent's children array
         const index = parentNode.children.findIndex(child => child.id === node.key);
         console.log("found parent now delete node: ", index)
         if (index !== -1) {
@@ -600,7 +601,8 @@ const handleDelete = (node) => {
         }
     } else {
         // 如果没有父节点，说明是根节点
-        // 根节点的删除逻辑
+        // If there is no parent, it is a root node
+        // Logic for deleting a root node
         const index = data.value.findIndex(item => item.id === node.key);
         console.log("not found parent now delete node: ", index)
         if (index !== -1) {
@@ -618,18 +620,18 @@ const handleDelete = (node) => {
 
 const clickDeletePipeline = (nodeData) => {
     ElMessageBox({
-        title: '删除合约',
+        title: 'Delete Contract',
         message: h('p', null, [
-            h('span', null, '确定要删除合约吗? 合约名： '),
+            h('span', null, 'Are you sure you want to delete this contract? Contract name: '),
             h('i', { style: 'color: red' }, nodeData.label),
         ]),
         showCancelButton: true,
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
+        confirmButtonText: 'Confirm',
+        cancelButtonText: 'Cancel',
         beforeClose: (action, instance, done) => {
             if (action === 'confirm') {
                 instance.confirmButtonLoading = true
-                instance.confirmButtonText = '正在删除...'
+                instance.confirmButtonText = 'Deleting...'
                 ''
                 axios
                     .post('/pipeline/delete/' + nodeData.key.split('-')[1] + '/', {
@@ -644,7 +646,7 @@ const clickDeletePipeline = (nodeData) => {
                         done()
                         ElMessage({
                             type: 'danger',
-                            message: "合约删除失败：" + error,
+                            message: "Failed to delete contract: " + error,
                         })
                     })
             } else {
@@ -654,7 +656,7 @@ const clickDeletePipeline = (nodeData) => {
     }).then((action) => {
         ElMessage({
             type: 'success',
-            message: "合约删除成功！",
+            message: "Contract deleted successfully!",
         })
     })
 }
@@ -702,7 +704,7 @@ const handleNodeClick = (nodeData, nodeInstance) => {
                     'pipeline_id': str_id.split("-")[1],
                 }))
                 .then(response => {
-                    // 正确: 载荷类型与定义匹配
+                    // Correct: payload type matches definition
                     emitter.emit('show_update_graph', { "tag": "1", "project_path": project_path.value, "pipe_id": str_id });
                     response.data['project_id'] = str_id.split("-")[0]
                     response.data['pipeline_detail'] = pipline_data
@@ -817,14 +819,14 @@ const appendNode = (parentId, item) => {
         return;
     }
 
-    var project_name = item["text"];
-    if (project_name == "我的项目") {
-        project_name = "我的合约"
+    var project_name = item["text"];    
+    if (project_name == "My Project") {
+        project_name = "My Contracts"
     }
 
     const newChild = {
         id: item["id"],
-        label: project_name,
+        label: project_name, 
         is_project: item["is_project"],
         children: [],
         valid: true,
@@ -870,14 +872,14 @@ const appendNode = (parentId, item) => {
 <style>
 .appContainerDark {
     height: 500px;
-    /* 假设一个父容器的高度 */
+    /* Assuming a parent container height */
     padding: 20px;
     border: 1px solid #4c4d4f;
 }
 
 .appContainerLight {
     height: 500px;
-    /* 假设一个父容器的高度 */
+    /* Assuming a parent container height */
     padding: 20px;
     border: 1px solid #dddfe6;
 }
@@ -906,12 +908,12 @@ const appendNode = (parentId, item) => {
 }
 
 .node-buttons {
-    /* 默认隐藏按钮 */
+    /* Buttons are hidden by default */
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
 }
 
-/* 关键：当鼠标悬停在整个节点容器上时，显示按钮 */
+/* Key: Show buttons when hovering over the entire node container */
 .custom-tree-node:hover .node-buttons {
     opacity: 1;
 }

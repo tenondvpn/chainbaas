@@ -17,16 +17,16 @@ import { ref } from 'vue';
 
 const externalLink = ref('http://82.156.224.174:8003/#/index');
 
-// 你可以动态改变这个链接
+// You can dynamically change this link
 // const changeLink = () => {
-//   externalLink.value = 'https://www.google.com/'; // 注意：谷歌会阻止嵌入
+//   externalLink.value = 'https://www.google.com/'; // Note: Google will block embedding
 // };
 </script>
 
 <style scoped>
 .iframe-container {
   width: 100%;
-  height: 600px; /* 设置一个固定的高度，以便 iframe 可见 */
+  height: 600px; /* Set a fixed height so the iframe is visible */
   border: 1px solid #ccc;
   border-radius: 8px;
   overflow: hidden;
@@ -37,7 +37,7 @@ const externalLink = ref('http://82.156.224.174:8003/#/index');
 <!-- 
 <template>
   <div class="redirect-container">
-    <p>正在跳转到外部网站...</p>
+    <p>Redirecting to external website...</p>
   </div>
 </template>
 

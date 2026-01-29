@@ -94,7 +94,7 @@ import { tags } from '@lezer/highlight';
 
 const themes = {
   'one-dark': oneDark,
-  'default': EditorView.theme({  // 默认纯白：自定义简单主题
+  'default': EditorView.theme({  // Default pure white: custom simple theme
     '&.cm-editor': { background: '#ffffff', color: '#000000' },
     '.cm-activeLine': { background: '#f0f0f0' },
     '.cm-gutters': { background: '#ffffff', borderRight: '1px solid #eee' }
@@ -148,7 +148,7 @@ emitter.on('update_graph', (payload) => {
 emitter.on('update_soldity_height', (height: number | string) => {
     // run_loading.value = false
     const numericHeight = Number(height); // convert to number
-    var adjustedHeight = numericHeight - 10; // 减去 tabs 高度
+    var adjustedHeight = numericHeight - 10; // Subtract tabs height
     if (adjustedHeight < 0) {
         adjustedHeight = 0;
     }
@@ -253,10 +253,10 @@ const emitterOff = () => {
 
 function isValidJSON(str) {
   try {
-    JSON.parse(str);
-    return true;  // 解析成功，返回 true
+    JSON.parse(str); 
+    return true;  // Parsing successful, return true
   } catch (error) {
-    return false; // 解析失败，返回 false
+    return false; // Parsing failed, return false
   }
 }
 
@@ -297,7 +297,7 @@ function confirmDialog() {
 }
 
 function decodeOutput(abi, functionName, outputHex) {
-    // 找到对应的函数 ABI 项
+    // Find corresponding function ABI item
     const funcAbi = abi.find(item => 
         item.type === "function" && 
         item.name === functionName &&
@@ -308,7 +308,7 @@ function decodeOutput(abi, functionName, outputHex) {
         throw new Error(`Function ${functionName} not found in ABI`);
     }
 
-    // 只支持单个返回值的情况（大多数 view 函数如此）
+    // Only supports single return value (as most view functions do)
     if (funcAbi.outputs.length !== 1) {
         console.warn("Warning: Multiple outputs detected, only returning the first one.");
     }
@@ -319,17 +319,17 @@ function decodeOutput(abi, functionName, outputHex) {
     return abiDecode(outputType, cleanHex);
 }
 
-// 简易 ABI 解码器（支持 uint、bool、address、string、bytes）
+// Simple ABI decoder (supports uint, bool, address, string, bytes)
 function abiDecode(type, hexData) {
     const data = hexData.toLowerCase();
 
     if (type === "string") {
-        // 动态类型：先读偏移 → 读长度 → 读数据
+        // Dynamic type: read offset -> read length -> read data
         const offset = parseInt(data.slice(0, 64), 16);           // 0x20 = 32 bytes
         const length = parseInt(data.slice(offset * 2, offset * 2 + 64), 16);
         const stringDataHex = data.slice(offset * 2 + 64, offset * 2 + 64 + length * 2);
         
-        // 每两个字符转成字节，再转 UTF-8 字符串
+        // Convert every two characters to bytes, then to UTF-8 string
         let str = '';
         for (let i = 0; i < stringDataHex.length; i += 2) {
             str += String.fromCharCode(parseInt(stringDataHex.substr(i, 2), 16));
@@ -337,7 +337,7 @@ function abiDecode(type, hexData) {
         return str;
 
     } else if (type.startsWith("uint") || type.startsWith("int")) {
-        // 静态数值类型：最后 64 位是值
+        // Static numeric type: last 64 bits are the value
         const valueHex = data.slice(-64);
         return BigInt('0x' + valueHex).toString();
 
@@ -417,9 +417,9 @@ function callFunction() {
                 var res_data = response.data.return_value;
                 try {
                     res_data = decodeOutput(abiJson.value, form.function,  response.data.return_value);
-                    // 输出：Function name() 返回值: test
+                    // Output: Function name() return value: test
                 } catch (err) {
-                    console.error("解析失败:", err.message);
+                    console.error("Parsing failed:", err.message);
                 }
 
                 ElMessage({
@@ -591,14 +591,14 @@ const codeValue = ref(`// SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.7.0 <0.9.0;
 
 `)
-// 主解析函数
+// Main parsing function
 function parseSolidity() {
     try {
-        // 重置结果
+        // Reset results
         constructor.value = null;
         otherFunctions.value = [];
 
-        // 解析所有函数
+        // Parse all functions
         parseAllFunctions();
 
         console.log('Constructor:', constructor.value);
@@ -609,11 +609,11 @@ function parseSolidity() {
     }
 }
 
-// 核心解析函数
+// Core parsing function
 function parseAllFunctions() {
-    // 正则匹配 constructor 和 function 声明
-    // 支持：修饰符顺序随意、空格、payable、returns (...) 等
-    // 匹配 constructor 或 function，支持修饰符顺序随意、多余空格、returns 等
+    // Regex match constructor and function declarations
+    // Supports: arbitrary modifier order, spaces, payable, returns (...), etc.
+    // Match constructor or function, supports arbitrary modifier order, extra spaces, returns, etc.
     const functionRegex = /(constructor|function)\s*(\w*)\s*\(\s*([^)]*?)\s*\)\s*(public|private|internal|external)?\s*(payable|view|pure)?\s*(returns\s*\(\s*([^)]*?)\s*\))?/gi;
     let match;
 
@@ -626,16 +626,16 @@ function parseAllFunctions() {
         const mutabilityRaw = match[5] || '';
         const returnsStr = (match[6] || '').trim();
 
-        // 解析参数（支持 memory/storage/calldata）
+        // Parse parameters (supports memory/storage/calldata)
         const parameters = parseParameters(paramsStr);
 
-        // 解析可见性
+        // Parse visibility
         const visibility = parseVisibility(fullMatch);
 
-        // 解析状态可变性（view / pure / payable / nonpayable）
+        // Parse state mutability (view / pure / payable / nonpayable)
         const stateMutability = parseStateMutability(fullMatch);
 
-        // 解析返回类型
+        // Parse return type
         const returns = parseReturnType(returnsStr);
 
         const funcData = {
@@ -654,7 +654,7 @@ function parseAllFunctions() {
     }
 }
 
-// 解析参数（支持类型 修饰符 名称，如 uint256[] memory ids）
+// Parse parameters (supports type modifier name, e.g., uint256[] memory ids)
 function parseParameters(paramsStr) {
     if (!paramsStr) return [];
 
@@ -662,7 +662,7 @@ function parseParameters(paramsStr) {
         const trimmed = param.trim();
         if (!trimmed) return null;
 
-        // 按空格分割
+        // Split by space
         const parts = trimmed.split(/\s+/).filter(p => p);
 
         if (parts.length === 0) return null;
@@ -671,7 +671,7 @@ function parseParameters(paramsStr) {
         let modifiers = [];
         let typeEndIndex = 0;
 
-        // 从后往前找数据位置修饰符（通常在类型后、名称前）
+        // Find data location modifier from back to front (usually after type, before name)
         for (let i = parts.length - 2; i >= 0; i--) {
             if (dataLocationModifiers.includes(parts[i])) {
                 modifiers.unshift(parts[i]);
@@ -692,39 +692,39 @@ function parseParameters(paramsStr) {
     }).filter(param => param !== null);
 }
 
-// 解析返回类型
+// Parse return type
 function parseReturnType(returnsStr) {
     if (!returnsStr) return '';
 
-    // 支持多个返回参数，如 uint256 balance, bool success
+    // Supports multiple return parameters, e.g., uint256 balance, bool success
     const types = returnsStr.split(',').map(t => t.trim());
     return types.map(t => {
         const parts = t.split(/\s+/);
-        return parts.slice(0, parts.length - 1).join(' ') || t; // 去掉可能的变量名
+        return parts.slice(0, parts.length - 1).join(' ') || t; // Remove possible variable names
     }).join(', ');
 }
 
-// 解析可见性
+// Parse visibility
 function parseVisibility(codeSnippet) {
     const lower = codeSnippet.toLowerCase();
     if (lower.includes('public')) return 'public';
     if (lower.includes('private')) return 'private';
     if (lower.includes('internal')) return 'internal';
     if (lower.includes('external')) return 'external';
-    return 'internal'; // 默认
+    return 'internal'; // Default
 }
 
-// 解析状态可变性（关键：支持 view）
+// Parse state mutability (Key: supports view)
 function parseStateMutability(codeSnippet) {
     const lower = codeSnippet.toLowerCase();
 
     if (lower.includes('pure')) return 'pure';
     if (lower.includes('view')) return 'view';
     if (lower.includes('payable')) return 'payable';
-    return 'nonpayable'; // 默认可修改状态
+    return 'nonpayable'; // Default state modifiable
 }
 
-// Solidity关键字和代码片段
+// Solidity keywords and snippets
 const solidityKeywords = [
     'pragma', 'solidity', 'contract', 'function', 'returns', 'public',
     'private', 'internal', 'external', 'view', 'pure', 'payable',
@@ -761,7 +761,7 @@ const soliditySnippets = [
     }
 ]
 
-// 自动完成器
+// Autocompleter
 function solidityCompleter(context) {
     const word = context.matchBefore(/\w*/)
     if (word.from === word.to && !context.explicit) return null
@@ -778,20 +778,20 @@ function solidityCompleter(context) {
     }
 }
 
-    // 可选：自定义 light mode 下的语法高亮（更清晰的颜色）
+    // Optional: Custom syntax highlighting for light mode (clearer colors)
 const lightHighlightStyle = HighlightStyle.define([
-    { tag: tags.keyword, color: "#d73a49", fontWeight: "bold" },        // 关键字红色加粗
-    { tag: tags.function(tags.variableName), color: "#6f42c1" },       // 函数名紫色
-    { tag: tags.string, color: "#032f62" },                            // 字符串深蓝
-    { tag: tags.number, color: "#005cc5" },                            // 数字蓝色
-    { tag: tags.comment, color: "#6a737d", fontStyle: "italic" },      // 注释灰色斜体
+    { tag: tags.keyword, color: "#d73a49", fontWeight: "bold" },        // Keywords red bold
+    { tag: tags.function(tags.variableName), color: "#6f42c1" },       // Function names purple
+    { tag: tags.string, color: "#032f62" },                            // Strings dark blue
+    { tag: tags.number, color: "#005cc5" },                            // Numbers blue
+    { tag: tags.comment, color: "#6a737d", fontStyle: "italic" },      // Comments gray italic
     { tag: tags.variableName, color: "#24292e" },
     { tag: tags.operator, color: "#d73a49" },
-    { tag: tags.typeName, color: "#22863a" },                          // 类型绿色
+    { tag: tags.typeName, color: "#22863a" },                          // Types green
     { tag: tags.propertyName, color: "#e36209" }
 ]);
 
-// Light Theme 配置
+// Light Theme Configuration
 const lightTheme = EditorView.theme({
     "&": {
         fontFamily: "'SF Mono', Monaco, 'Cascadia Code', monospace",
@@ -824,7 +824,7 @@ const lightTheme = EditorView.theme({
 
 
 
-// 初始化编辑器
+// Initialize editor
 const initEditor = () => {
     if (!editorElement.value) return
 
@@ -848,47 +848,47 @@ const initEditor = () => {
         //         fontFamily: "'SF Mono', Monaco, 'Cascadia Code', monospace",
         //         fontSize: "13px",
         //         lineHeight: "1.5",
-        //         backgroundColor: "#ffffff",  // 纯白背景
-        //         color: "#24292e"             // 深灰文字（类似 GitHub）
+        //         backgroundColor: "#ffffff",  // Pure white background
+        //         color: "#24292e"             // Dark gray text (similar to GitHub)
         //     },
         //     ".cm-content": {
         //         fontFamily: "Menlo, Monaco, 'Courier New', monospace",
         //         fontSize: "12px",
         //         color: "#24292e",
-        //         caretColor: "#0366d6"        // 蓝色光标，更醒目
+        //         caretColor: "#0366d6"        // Blue cursor, more visible
         //     },
         //     ".cm-gutter": {
         //         fontFamily: "inherit",
         //         fontSize: "inherit",
-        //         backgroundColor: "#f6f8fa",  // 浅灰 gutter 背景
-        //         color: "#6a737d"             // 灰色行号
+        //         backgroundColor: "#f6f8fa",  // Light gray gutter background
+        //         color: "#6a737d"             // Gray line numbers
         //     },
         //     ".cm-gutters": {
         //         backgroundColor: "#f6f8fa",
         //         borderRight: "1px solid #e1e4e8"
         //     },
         //     ".cm-activeLine": {
-        //         backgroundColor: "#ffd33d1a" // 浅黄高亮当前行
+        //         backgroundColor: "#ffd33d1a" // Light yellow highlight current line
         //     },
         //     ".cm-activeLineGutter": {
         //         backgroundColor: "#f6f8fa"
         //     },
         //     ".cm-selectionBackground, ::selection": {
-        //         backgroundColor: "#0366d699" // 半透明蓝色选中背景
+        //         backgroundColor: "#0366d699" // Semi-transparent blue selection background
         //     },
         //     "&.cm-focused .cm-selectionBackground": {
         //         backgroundColor: "#0366d699"
         //     },
         //     ".cm-cursor, .cm-dropCursor": {
-        //         borderLeftColor: "#0366d6"   // 蓝色光标
+        //         borderLeftColor: "#0366d6"   // Blue cursor
         //     },
         //     ".cm-matchingBracket, .cm-nonmatchingBracket": {
         //         backgroundColor: "#0366d633",
         //         outline: "1px solid #0366d666"
         //     }
         // }, { dark: true }),
-        // 新增：绑定 Ctrl+S（Windows/Linux） / Cmd+S（Mac） 保存事件
-        Prec.highest(  // 使用最高优先级，确保不会被其他 keymap 覆盖
+        // Added: Bind Ctrl+S (Windows/Linux) / Cmd+S (Mac) save event
+        Prec.highest(  // Use highest priority to ensure not covered by other keymaps
             keymap.of([
                 {
                     key: 'Ctrl-s',      // Windows/Linux
@@ -896,22 +896,22 @@ const initEditor = () => {
                     run: (view) => {
                         prev_save_graph_tm_ms = 0;
                         TimeToSaveGraph()
-                        return true;  // 返回 true 表示事件已处理
+                        return true;  // Return true indicating event handled
                     },
-                    preventDefault: true  // 防止触发浏览器默认保存对话框
+                    preventDefault: true  // Prevent triggering browser default save dialog
                 }
             ])
         )
     ]
 
-    // 添加主题
+    // Add theme
     console.log("default is isDark: ", isDark.value)
     if (isDark.value) {
         extensions.push(themeCompartment.of(oneDark))
     } else {
         extensions.push(themeCompartment.of([
             lightTheme,
-            syntaxHighlighting(lightHighlightStyle)  // 同时切换高亮风格
+            syntaxHighlighting(lightHighlightStyle)  // Switch highlight style simultaneously
         ]))
     }
 
@@ -925,29 +925,29 @@ const initEditor = () => {
         parent: editorElement.value
     })
 
-    // 监听光标位置变化
+    // Listen for cursor position changes
     editorView.dom.addEventListener('mousemove', updateCursorFromEvent)
     editorView.dom.addEventListener('keydown', updateCursorFromEvent)
 }
 
-// 切换到白色主题的函数（随时调用）
+// Function to switch to light theme (call anytime)
 function switchToLightTheme() {
     editorView.dispatch({
         effects: themeCompartment.reconfigure([
             lightTheme,
-            syntaxHighlighting(lightHighlightStyle)  // 同时切换高亮风格
+            syntaxHighlighting(lightHighlightStyle)  // Switch highlight style simultaneously
         ])
     });
 }
 
-// 切换回暗色主题的函数（可选）
+// Function to switch back to dark theme (optional)
 function switchToDarkTheme() {
     editorView.dispatch({
         effects: themeCompartment.reconfigure(oneDark)
     });
 }
 
-// 更新光标位置
+// Update cursor position
 const updateCursorPosition = (state) => {
     const selection = state.selection.main
     const line = state.doc.lineAt(selection.from)
@@ -961,7 +961,7 @@ const updateCursorFromEvent = () => {
     }
 }
 
-// 生命周期
+// Lifecycle
 onMounted(() => {
     emitterOn()
     console.log('SolidityEditor mounted.')
@@ -1009,7 +1009,7 @@ onUnmounted(() => {
     }
 })
 
-// 监听代码变化
+// Listen for code changes
 watch(codeValue, (newValue) => {
     if (editorView && newValue !== editorView.state.doc.toString()) {
         const transaction = editorView.state.update({
@@ -1160,7 +1160,7 @@ watch(codeValue, (newValue) => {
     white-space: pre-wrap;
 }
 
-/* 深色主题适配 */
+/* Dark theme adaptation */
 :deep(.cm-editor) {
     height: 100%;
 }
@@ -1171,7 +1171,7 @@ watch(codeValue, (newValue) => {
     line-height: 1.5;
 }
 
-/* 响应式设计 */
+/* Responsive design */
 @media (max-width: 768px) {
     .toolbar {
         flex-direction: column;

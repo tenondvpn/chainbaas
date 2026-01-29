@@ -3,35 +3,35 @@
         label-position="left">
         <el-form-item prop="project" required>
             <el-col :span="24">
-                <el-form-item prop="project" label="选择项目" required>
+                <el-form-item prop="project" label="Select Project" required>
                     <el-tree-select v-model="ruleForm.project" :data="treeData"  check-strictly
                         node-key="id"  />
                 </el-form-item>
             </el-col>
         </el-form-item>
 
-        <el-form-item label="合约名称" prop="pipeline_name">
+        <el-form-item label="Contract Name" prop="pipeline_name">
             <el-input v-model="ruleForm.pipeline_name" />
         </el-form-item>
 
-        <el-form-item label="负责人:" prop="users" style="margin-top: 17px">
+        <el-form-item label="Owner:" prop="users" style="margin-top: 17px">
             <el-select v-model="selectedUsers" multiple clearable filterable placeholder="Select">
                 <el-option v-for="item in userOptions" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
         </el-form-item>
-        <el-form-item label="描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入合约描述信息" />
+        <el-form-item label="Description" prop="desc" required>
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="Please enter contract description" />
         </el-form-item>
 
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button v-if="updatePipeline" type="primary" @click="submitForm(ruleFormRef)">
-                修改合约
+                Update Contract
             </el-button>
             <el-button v-else type="primary" @click="submitForm(ruleFormRef)">
-                创建合约
+                Create Contract
             </el-button>
-            <el-button @click="resetForm(ruleFormRef)">重置参数</el-button>
+            <el-button @click="resetForm(ruleFormRef)">Reset Parameters</el-button>
         </el-form-item>
     </el-form>
 </template>
@@ -79,11 +79,11 @@ const ruleForm = reactive<RuleForm>({
 
 const rules = reactive<FormRules<RuleForm>>({
     project: [
-        { required: true, message: '请选择合约所在项目', trigger: 'blur' },
+        { required: true, message: 'Please select the project for the contract', trigger: 'blur' },
     ],
     pipeline_name: [
-        { required: true, message: '请输入合约名称', trigger: 'blur' },
-        { min: 1, max: 64, message: '长度不超过64个字符。', trigger: 'blur' },
+        { required: true, message: 'Please enter the contract name', trigger: 'blur' },
+        { min: 1, max: 64, message: 'Length should not exceed 64 characters.', trigger: 'blur' },
     ],
     users: [
         {
@@ -109,7 +109,7 @@ const rules = reactive<FormRules<RuleForm>>({
     desc: [
         {
             required: true,
-            message: '请输入合约描述',
+            message: 'Please enter the contract description',
             trigger: 'change',
         },
     ],
@@ -143,25 +143,25 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/pipeline/update/' + ruleForm.pipeline_id + "/", qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.warning("修改合约失败: " + response.data.msg)
+                            ElMessage.warning("Failed to update contract: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("修改合约成功！")
+                            ElMessage.success("Contract updated successfully!")
                             emitter.emit("success_update_pipeline", '')
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("修改合约失败: " + error)
+                        ElMessage.error("Failed to update contract: " + error)
                     })
             } else {
                 axios
                     .post('/pipeline/create/', qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.error("创建合约失败: " + response.data.msg)
+                            ElMessage.error("Failed to create contract: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("创建合约成功！")
+                            ElMessage.success("Contract created successfully!")
                             params["pid"] = project_id
                             params["text"] = ruleForm.pipeline_name
                             params["is_project"] = false
@@ -172,12 +172,12 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("创建合约失败: " + error)
+                        ElMessage.error("Failed to create contract: " + error)
                     })
             }
         } else {
             console.log('error submit!', fields)
-            ElMessage.error("提交失败！ " + fields)
+            ElMessage.error("Submission failed! " + fields)
         }
     })
 }
@@ -201,7 +201,7 @@ const getProjectTree = async () => {
             treeData.value = response.data
         })
         .catch(error => {
-            ElMessage.error("创建合约失败: " + error)
+            ElMessage.error("Failed to create contract: " + error)
         })
 }
 

@@ -49,7 +49,7 @@ const winHandleResize = () => {
 onMounted(() => {
     dynamicTreeHeight.value = window.innerHeight - 47
     window.addEventListener('resize', winHandleResize);
-    // // 初始化时触发一次调整
+    // // Trigger adjustment once on initialization
     nextTick(() => {
         winHandleResize();
     });
@@ -65,7 +65,7 @@ onMounted(() => {
 });
 
 
-const project_path_str = ref('我的合约')
+const project_path_str = ref('My Contracts')
 const project_id = ref("68")
 const choosed_pipeline = ref(false)
 const choosed_pipeline_id = ref('')
@@ -76,7 +76,7 @@ const props = defineProps({
 });
 
 const emitterOn = () => {
-    // 正确接收事件
+    // Correctly receive events
     emitter.on('show_update_graph', (payload) => {
         update_graph(payload)
     });

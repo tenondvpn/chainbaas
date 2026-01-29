@@ -7,12 +7,12 @@
                 <p class="user-intro">{{ userInfo.intro }}</p>
 
                 <el-form :model="form" label-width="auto" style="max-width: 131px">
-                    <el-form-item label="切换背景色">
+                    <el-form-item label="Switch Background">
                         <el-switch v-model="isDark" :active-icon="Moon" :inactive-icon="Sunny" inline-prompt
                             @change="toggleDark" style="margin-top: 0px; width: 200px;margin-left:0px;" />
 
                     </el-form-item>
-                    <el-form-item label="切换主题色">
+                    <el-form-item label="Switch Theme Color">
                         <el-color-picker v-model="themeColor" show-alpha :predefine="predefineColors" style="width: 48px; margin-left: -4px;"
                             @change="logColor" />
                     </el-form-item>
@@ -24,54 +24,54 @@
             <el-card class="content-card">
                 <template #header>
                     <div class="card-header">
-                        <span>基本信息</span>
+                        <span>Basic Info</span>
                     </div>
                 </template>
-                <p class="info-item"><strong>昵称：</strong>{{ userInfo.name }}</p>
-                <p class="info-item"><strong>邮箱：</strong>{{ userInfo.email }}</p>
-                <p class="info-item"><strong>注册日期：</strong>{{ userInfo.joinDate }}</p>
+                <p class="info-item"><strong>Nickname:</strong>{{ userInfo.name }}</p>
+                <p class="info-item"><strong>Email:</strong>{{ userInfo.email }}</p>
+                <p class="info-item"><strong>Join Date:</strong>{{ userInfo.joinDate }}</p>
             </el-card>
             <el-card class="content-card">
                 <template #header>
                     <div class="card-header">
-                        <span>数据概览</span>
+                        <span>Data Overview</span>
                     </div>
                 </template>
                 <div class="data-overview">
                     <div class="data-item">
                         <h3>23</h3>
-                        <p>订单总数</p>
+                        <p>Total Orders</p>
                     </div>
                     <div class="data-item">
                         <h3>4</h3>
-                        <p>待处理</p>
+                        <p>Pending</p>
                     </div>
                     <div class="data-item">
                         <h3>58</h3>
-                        <p>浏览量</p>
+                        <p>Views</p>
                     </div>
                 </div>
             </el-card>
             <el-card class="content-card">
                 <template #header>
                     <div class="card-header">
-                        <span>基本信息</span>
+                        <span>Basic Info</span>
                     </div>
                 </template>
-                <p class="info-item"><strong>昵称：</strong>{{ userInfo.name }}</p>
-                <p class="info-item"><strong>邮箱：</strong>{{ userInfo.email }}</p>
-                <p class="info-item"><strong>注册日期：</strong>{{ userInfo.joinDate }}</p>
+                <p class="info-item"><strong>Nickname:</strong>{{ userInfo.name }}</p>
+                <p class="info-item"><strong>Email:</strong>{{ userInfo.email }}</p>
+                <p class="info-item"><strong>Join Date:</strong>{{ userInfo.joinDate }}</p>
             </el-card>
 
             <el-card class="content-card">
                 <template #header>
                     <div class="card-header">
-                        <span>基本信息</span>
+                        <span>Basic Info</span>
                     </div>
                 </template>
-                <p class="info-item"><strong>昵称：</strong>{{ userInfo.name }}</p>
-                <p class="info-item"><strong>邮箱：</strong>{{ userInfo.email }}</p>
-                <p class="info-item"><strong>注册日期：</strong>{{ userInfo.joinDate }}</p>
+                <p class="info-item"><strong>Nickname:</strong>{{ userInfo.name }}</p>
+                <p class="info-item"><strong>Email:</strong>{{ userInfo.email }}</p>
+                <p class="info-item"><strong>Join Date:</strong>{{ userInfo.joinDate }}</p>
             </el-card>
 
         </el-main>
@@ -121,14 +121,14 @@ const predefineColors = ref([
 ])
 
 
-// 从 localStorage 获取或设置默认主题色
+// Get or set default theme color from localStorage
 const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF');
 
-// 监听 themeColor 的变化
+// Watch for themeColor changes
 watch(themeColor, (newColor) => {
-    // 动态修改 Element UI 的 --el-color-primary 变量
+    // Dynamically modify Element UI --el-color-primary variable
     document.documentElement.style.setProperty('--el-color-primary', newColor);
-    // 同时修改其他相关的颜色变量
+    // Simultaneously modify other related color variables
     document.documentElement.style.setProperty('--el-color-primary-light-3', newColor);
     document.documentElement.style.setProperty('--el-color-primary-light-5', newColor);
     document.documentElement.style.setProperty('--el-color-primary-light-7', newColor);
@@ -136,27 +136,27 @@ watch(themeColor, (newColor) => {
     document.documentElement.style.setProperty('--el-color-primary-light-9', newColor);
 });
 
-// 保存颜色到 localStorage
+// Save color to localStorage
 const saveTheme = () => {
     localStorage.setItem('themeColor', themeColor.value);
 };
 
 function logColor(val) {
-    console.log('颜色已更新:', val)
-    // document.documentElement 是全局变量时
+    console.log('Color updated:', val)
+    // When document.documentElement is a global variable
     const el = document.documentElement
     // const el = document.getElementById('xxx')
 
-    // 获取 css 变量
+    // Get css variable
     getComputedStyle(el).getPropertyValue(`--el-color-primary`)
 
-    // 设置 css 变量
+    // Set css variable
     el.style.setProperty('--el-color-primary', val)
     themeColor.value = val;
     saveTheme()
 }
 
-// 页面加载时，应用保存的颜色
+// Apply saved color on page load
 document.documentElement.style.setProperty('--el-color-primary', themeColor.value);
 
 
@@ -178,14 +178,14 @@ const onSubmit = () => {
 </script>
 
 <style scoped>
-/* 整个页面的容器 */
+/* Container for the entire page */
 .profile-container {
     height: calc(100vh - 60px);
-    /* 减去头部高度，使侧边栏自适应 */
+    /* Subtract header height to make sidebar adaptive */
     /* background-color: #f0f2f5; */
 }
 
-/* 侧边栏样式 */
+/* Sidebar styles */
 .profile-aside {
     /* background-color: #ffffff; */
     box-shadow: 2px 0 6px rgba(0, 0, 0, 0.05);
@@ -218,13 +218,13 @@ const onSubmit = () => {
     padding-top: 20px;
 }
 
-/* 主内容区样式 */
+/* Main content area styles */
 .profile-main {
     padding: 20px;
     /* display: flex; */
     flex-direction: column;
     gap: 20px;
-    /* 卡片之间的间距 */
+    /* Spacing between cards */
     overflow-y: auto;
 }
 

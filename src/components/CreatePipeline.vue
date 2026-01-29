@@ -3,28 +3,28 @@
         label-position="left">
         <el-form-item prop="project" required>
             <el-col :span="24">
-                <el-form-item prop="project" label="选择项目" required>
+                <el-form-item prop="project" label="Select Project" required>
                     <el-tree-select v-model="ruleForm.project" :data="treeData"  check-strictly
                         node-key="id"  />
                 </el-form-item>
             </el-col>
         </el-form-item>
 
-        <el-form-item label="合约名称" prop="pipeline_name">
+        <el-form-item label="Contract Name" prop="pipeline_name">
             <el-input v-model="ruleForm.pipeline_name" />
         </el-form-item>
 
-        <el-form-item label="执行周期" prop="ct_time">
-            <el-input v-model="ruleForm.ct_time" placeholder="不填写：不自动周期执行" style="margin-top: 0px; width:91%" />
+        <el-form-item label="Execution Cycle" prop="ct_time">
+            <el-input v-model="ruleForm.ct_time" placeholder="Leave blank for no automatic execution" style="margin-top: 0px; width:91%" />
             <el-popover placement="right" :width="520" trigger="hover">
                 <template #reference>
                     <el-button style="margin-left: 12px;" :icon="QuestionFilled" circle />
                 </template>
                 <el-alert type="info" show-icon :closable="false" :style="`border: 1px solid --el-color-primary;`">
-                    <p>"执行周期" 是指每隔多少时间自动运行，采用crontab的格式，例如:</p>
+                    <p>"Execution Cycle" refers to the automatic execution interval, using crontab format, for example:</p>
                     <el-row>
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每分钟执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute once per minute</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">* * * * *</p>
@@ -32,7 +32,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每10分钟执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute every 10 minutes</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">*/10 * * * *</p>
@@ -40,7 +40,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每小时的第10分钟执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute at the 10th minute of every hour</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">10 * * * *</p>
@@ -48,7 +48,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每天12点10分执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute at 12:10 every day</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">10 12 * * *</p>
@@ -56,7 +56,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每月12号12点10分执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute at 12:10 on the 12th of every month</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">10 12 12 * *</p>
@@ -64,7 +64,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每年1月12号12点10分执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute at 12:10 on January 12th every year</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">10 12 12 1 *</p>
@@ -72,7 +72,7 @@
                     </el-row>
                     <el-row style="margin-top: 0px;">
                         <el-col :span="14">
-                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">每周一的12点10分执行一次</p>
+                            <p style="margin-top: 0px; margin-right: 20px; text-align: left;">Execute at 12:10 every Monday</p>
                         </el-col>
                         <el-col :span="10">
                             <p style="margin-top: 0px;">10 12 * * 1</p>
@@ -82,13 +82,13 @@
             </el-popover>
         </el-form-item>
 
-        <el-form-item label="负责人:" prop="users" style="margin-top: 17px">
+        <el-form-item label="Owner:" prop="users" style="margin-top: 17px">
             <el-select v-model="selectedUsers" multiple clearable filterable placeholder="Select">
                 <el-option v-for="item in userOptions" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
         </el-form-item>
 
-        <el-form-item label="报警方式:" prop="priority" style="margin-top: 17px">
+        <el-form-item label="Alert Method:" prop="priority" style="margin-top: 17px">
             <el-checkbox-group v-model="monitorsGroup" size="large">
                 <el-checkbox-button v-for="monitor_way in monitors" :key="monitor_way" :value="monitor_way">
                     {{ monitor_way }}
@@ -96,24 +96,24 @@
             </el-checkbox-group>
         </el-form-item>
 
-        <el-form-item label="有效期至" prop="timeout">
-            <el-date-picker v-model="ruleForm.timeout" type="date" placeholder="选择过期时间点" :disabled-date="disabledDate"
+        <el-form-item label="Valid Until" prop="timeout">
+            <el-date-picker v-model="ruleForm.timeout" type="date" placeholder="Select expiration date" :disabled-date="disabledDate"
                 value-format="YYYY-MM-DD" :shortcuts="shortcuts" style="width: 100%;" />
         </el-form-item>
 
-        <el-form-item label="描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入合约流描述信息" />
+        <el-form-item label="Description" prop="desc" required>
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="Please enter contract flow description" />
         </el-form-item>
 
         <el-divider border-style="dashed" />
         <el-form-item>
             <el-button v-if="updatePipeline" type="primary" @click="submitForm(ruleFormRef)">
-                修改合约
+                Update Contract
             </el-button>
             <el-button v-else type="primary" @click="submitForm(ruleFormRef)">
-                创建合约
+                Create Contract
             </el-button>
-            <el-button @click="resetForm(ruleFormRef)">重置参数</el-button>
+            <el-button @click="resetForm(ruleFormRef)">Reset Parameters</el-button>
         </el-form-item>
     </el-form>
 </template>
@@ -129,8 +129,8 @@ import emitter from './EventBus';
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { number } from 'echarts';
 
-const monitors = ['邮件', '短信', '钉钉', '微信']
-const monitorsGroup = ref(['邮件', '短信'])
+const monitors = ['Email', 'SMS', 'DingTalk', 'WeChat']
+const monitorsGroup = ref(['Email', 'SMS'])
 const selectedUsers = ref();
 const updatePipeline = ref(false);
 
@@ -168,11 +168,11 @@ const ruleForm = reactive<RuleForm>({
 
 const rules = reactive<FormRules<RuleForm>>({
     project: [
-        { required: true, message: '请选择合约所在项目', trigger: 'blur' },
+        { required: true, message: 'Please select the project for the contract', trigger: 'blur' },
     ],
     pipeline_name: [
-        { required: true, message: '请输入合约名称', trigger: 'blur' },
-        { min: 1, max: 64, message: '长度不超过64个字符。', trigger: 'blur' },
+        { required: true, message: 'Please enter the contract name', trigger: 'blur' },
+        { min: 1, max: 64, message: 'Length should not exceed 64 characters.', trigger: 'blur' },
     ],
     ct_time: [
         {
@@ -198,7 +198,7 @@ const rules = reactive<FormRules<RuleForm>>({
     timeout: [
         {
             required: true,
-            message: '请设置合约删除超时时间',
+            message: 'Please set the contract deletion timeout',
             trigger: 'change',
         },
     ],
@@ -212,7 +212,7 @@ const rules = reactive<FormRules<RuleForm>>({
     desc: [
         {
             required: true,
-            message: '请输入合约描述',
+            message: 'Please enter the contract description',
             trigger: 'change',
         },
     ],
@@ -228,22 +228,22 @@ const submitForm = async (formEl: FormInstance | undefined) => {
 
     var monitor_way = 0
     console.log(monitorsGroup.value)
-    if (monitorsGroup.value.indexOf('邮件') >= 0) {
+    if (monitorsGroup.value.indexOf('Email') >= 0) {
         monitor_way |= 1
         console.log("monitor: ", 1)
     }
 
-    if (monitorsGroup.value.indexOf('短信') >= 0) {
+    if (monitorsGroup.value.indexOf('SMS') >= 0) {
         monitor_way |= 2
         console.log("monitor: ", 2)
     }
 
-    if (monitorsGroup.value.indexOf('钉钉') >= 0) {
+    if (monitorsGroup.value.indexOf('DingTalk') >= 0) {
         monitor_way |= 4
         console.log("monitor: ", 4)
     }
 
-    if (monitorsGroup.value.indexOf('微信') >= 0) {
+    if (monitorsGroup.value.indexOf('WeChat') >= 0) {
         monitor_way |= 8
         console.log("monitor: ", 8)
     }
@@ -268,25 +268,25 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/pipeline/update/' + ruleForm.pipeline_id + "/", qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.warning("修改合约失败: " + response.data.msg)
+                            ElMessage.warning("Failed to update contract: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("修改合约成功！")
+                            ElMessage.success("Contract updated successfully!")
                             emitter.emit("success_update_pipeline", '')
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("修改合约失败: " + error)
+                        ElMessage.error("Failed to update contract: " + error)
                     })
             } else {
                 axios
                     .post('/pipeline/create/', qs.stringify(params))
                     .then(response => {
                         if (response.data.status != 0) {
-                            ElMessage.error("创建合约失败: " + response.data.msg)
+                            ElMessage.error("Failed to create contract: " + response.data.msg)
                         } else {
                             var project_id = ruleForm.project
-                            ElMessage.success("创建合约成功！")
+                            ElMessage.success("Contract created successfully!")
                             params["pid"] = project_id
                             params["text"] = ruleForm.pipeline_name
                             params["is_project"] = false
@@ -296,12 +296,12 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("创建合约失败: " + error)
+                        ElMessage.error("Failed to create contract: " + error)
                     })
             }
         } else {
             console.log('error submit!', fields)
-            ElMessage.error("提交失败！ " + fields)
+            ElMessage.error("Submission failed! " + fields)
         }
     })
 }
@@ -333,7 +333,7 @@ const getProjectTree = async () => {
             treeData.value = response.data
         })
         .catch(error => {
-            ElMessage.error("创建合约失败: " + error)
+            ElMessage.error("Failed to create contract: " + error)
         })
 }
 
@@ -450,11 +450,11 @@ const get_user_list = async () => {
 
 const shortcuts = [
     {
-        text: '今天',
+        text: 'Today',
         value: new Date(),
     },
     {
-        text: '3天后',
+        text: '3 days later',
         value: () => {
             const date = new Date()
             date.setTime(date.getTime() + 3 * 3600 * 1000 * 24)
@@ -462,7 +462,7 @@ const shortcuts = [
         },
     },
     {
-        text: '一个星期后',
+        text: 'A week later',
         value: () => {
             const date = new Date()
             date.setTime(date.getTime() + 7 * 3600 * 1000 * 24 * 7)
@@ -471,7 +471,7 @@ const shortcuts = [
     },
 
     {
-        text: '一个月后',
+        text: 'A month later',
         value: () => {
             const date = new Date()
             date.setTime(date.getTime() + 30 * 3600 * 1000 * 24 * 7)
@@ -480,7 +480,7 @@ const shortcuts = [
     },
 
     {
-        text: '一年后',
+        text: 'A year later',
         value: () => {
             const date = new Date()
             date.setTime(date.getTime() + 365 * 3600 * 1000 * 24 * 7)
@@ -489,7 +489,7 @@ const shortcuts = [
     },
 
     {
-        text: '三年后',
+        text: 'Three years later',
         value: () => {
             const date = new Date()
             date.setTime(date.getTime() + 3 * 365 * 3600 * 1000 * 24 * 7)

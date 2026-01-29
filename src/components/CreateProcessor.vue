@@ -2,39 +2,39 @@
     <el-form ref="ruleFormRef" style="max-width: 750px;margin-left: 40px;" :model="ruleForm" :rules="rules" label-width="auto"
         label-position="left">
         <el-form-item prop="project" label="选择项目" required>
-            <el-tree-select v-model="ruleForm.project" lazy :load="load" :props="processor_props" check-strictly
+            <el-tree-select v-model="ruleForm.project" label="Select Project" lazy :load="load" :props="processor_props" check-strictly
                 :render-after-expand="false" style="width: 100%" />
         </el-form-item>
-        <el-form-item prop="type" label="模板合约类型" required>
+        <el-form-item prop="type" label="Template Contract Type" required>
             <el-select v-model="processorType" value-key="id" placeholder="Select" style="width: 100%">
                 <el-option v-for="item in type_options" :key="item.id" :label="item.label" :value="item.id" />
             </el-select>
         </el-form-item>
 
-        <el-form-item label="模板合约名称" prop="name">
+        <el-form-item label="Template Contract Name" prop="name">
             <el-input v-model="ruleForm.name" />
         </el-form-item>
-        <el-form-item label="负责人:" prop="users" style="margin-top: 17px">
+        <el-form-item label="Owner:" prop="users" style="margin-top: 17px">
             <el-select v-model="selectedUsers" multiple clearable filterable placeholder="Select">
                 <el-option v-for="item in userOptions" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
         </el-form-item>
-        <el-form-item label="模板合约描述" prop="desc" required>
-            <el-input v-model="ruleForm.desc" type="textarea" placeholder="请输入模板合约描述信息！" />
+        <el-form-item label="Template Contract Description" prop="desc" required>
+            <el-input v-model="ruleForm.desc" type="textarea" placeholder="Please enter template contract description!" />
         </el-form-item>
-        <el-form-item v-if="processorType === TaskTypes.TYPE_SHELL" label="shell命令" prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入shell命令，可以多行！" />
-        </el-form-item>
-
-        <el-form-item v-if="processorType === TaskTypes.TYPE_CLICKHOUSE" label="ck-sql命令" prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入clickhouse的SQL命令，可以多行！" />
+        <el-form-item v-if="processorType === TaskTypes.TYPE_SHELL" label="Shell Command" prop="shell" required>
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter shell command, multi-line supported!" />
         </el-form-item>
 
-        <el-form-item v-if="processorType === TaskTypes.TYPE_ODPS" label="odps-sql命令" prop="shell" required>
-            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="输入odps的SQL命令，可以多行！" />
+        <el-form-item v-if="processorType === TaskTypes.TYPE_CLICKHOUSE" label="CK-SQL Command" prop="shell" required>
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter ClickHouse SQL command, multi-line supported!" />
         </el-form-item>
-        <el-form-item label="模板合约标签" prop="tags" required>
-            <el-input-tag v-model="ruleForm.tags" tag-type="primary" :max="3" placeholder="最多设置三个标签">
+
+        <el-form-item v-if="processorType === TaskTypes.TYPE_ODPS" label="ODPS-SQL Command" prop="shell" required>
+            <el-input v-model="ruleForm.shell" type="textarea" :rows="6" placeholder="Enter ODPS SQL command, multi-line supported!" />
+        </el-form-item>
+        <el-form-item label="Template Contract Tags" prop="tags" required>
+            <el-input-tag v-model="ruleForm.tags" tag-type="primary" :max="3" placeholder="Set up to three tags">
                 <template #tag="{ value }">
                     <div class="flex items-center">
                         <el-icon class="mr-1">
@@ -136,14 +136,14 @@ interface RuleForm {
 
 const rules = reactive<FormRules<RuleForm>>({
     project: [
-        { required: true, message: '请选择项目', trigger: 'blur' },
+        { required: true, message: 'Please select a project', trigger: 'blur' },
     ],
     type: [
-        { required: true, message: '请选择模板合约类型', trigger: 'blur' },
+        { required: true, message: 'Please select a template contract type', trigger: 'blur' },
     ],
     name: [
-        { required: true, message: '请输入模板合约名称', trigger: 'blur' },
-        { min: 1, max: 30, message: '长度不超过30个字符。', trigger: 'blur' },
+        { required: true, message: 'Please enter the template contract name', trigger: 'blur' },
+        { min: 1, max: 30, message: 'Length should not exceed 30 characters.', trigger: 'blur' },
     ],
     configs: [
         {
@@ -155,7 +155,7 @@ const rules = reactive<FormRules<RuleForm>>({
     desc: [
         {
             required: true,
-            message: '请输入合约描述',
+            message: 'Please enter the contract description',
             trigger: 'change',
         },
     ],
@@ -176,7 +176,7 @@ const rules = reactive<FormRules<RuleForm>>({
     shell: [
         {
             required: true,
-            message: '请输入命令！',
+            message: 'Please enter the command!',
             trigger: 'change',
         },
     ],
@@ -267,15 +267,15 @@ const DeleteProcessor = () => {
         .post('/pipeline/delete_task/' + props.pipeline_id + '/', qs.stringify(params))
         .then(response => {
             if (response.status != 200 || response.data.status != 0) {
-                ElMessage.warning("删除合约失败：" + response.data.info)
+                ElMessage.warning("Failed to delete contract: " + response.data.info)
             } else {
                 console.log(response.data)
                 emitter.emit("delete_task_success", props.task_info.task.id)
-                ElMessage.success("删除合约成功！")
+                ElMessage.success("Contract deleted successfully!")
             }
         })
         .catch(error => {
-            ElMessage.error("创建合约失败：" + error)
+            ElMessage.error("Failed to delete contract: " + error)
             console.log(error)
         })
 }
@@ -333,15 +333,15 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/processor/update/' + props.processor_info.processor.id + '/', qs.stringify(params))
                     .then(response => {
                         if (response.status != 200 || response.data.status != 0) {
-                            ElMessage.warning("修改模板合约失败：" + response.data.msg)
+                            ElMessage.warning("Failed to update template contract: " + response.data.msg)
                         } else {
                             console.log(response.data)
                             emitter.emit("update_processor_success", { "id": props.processor_info.processor.project_id + "_" + props.processor_info.processor.id })
-                            ElMessage.success("修改模板合约成功！")
+                            ElMessage.success("Template contract updated successfully!")
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("修改模板合约失败：" + error)
+                        ElMessage.error("Failed to update template contract: " + error)
                         console.log(error)
                     })
             } else {
@@ -349,7 +349,7 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                     .post('/processor/create/', qs.stringify(params))
                     .then(response => {
                         if (response.status != 200 || response.data.status != 0) {
-                            ElMessage.warning("创建模板合约失败：" + response.data.msg)
+                            ElMessage.warning("Failed to create template contract: " + response.data.msg)
                         } else {
                             console.log(response.data)
                             var tmp_project_id = ruleForm.project 
@@ -370,11 +370,11 @@ const submitForm = async (formEl: FormInstance | undefined) => {
                                 }
                             }
                             emitter.emit("create_processor_success", emit_data)
-                            ElMessage.success("创建模板合约成功！")
+                            ElMessage.success("Template contract created successfully!")
                         }
                     })
                     .catch(error => {
-                        ElMessage.error("创建模板合约失败：" + error)
+                        ElMessage.error("Failed to create template contract: " + error)
                         console.log(error)
                     })
             }

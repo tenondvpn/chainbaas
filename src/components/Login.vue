@@ -86,18 +86,18 @@ export default {
 
     setup() {
 
-        //切换登录、注册面板
+        // Toggle login/register panel
         const loginStatus = ref(true);
         const onTogglePanelStatus = () => {
             loginStatus.value = !loginStatus.value;
         };
 
-        //获取验证码
+        // Get verification code
         const onGetCodeClick = () => {
             console.log("Get Verification Code");
         };
 
-        //登录操作
+        // Login operation
         const loginForm = reactive({
             account: "shardora",
             password: "test",
@@ -120,7 +120,7 @@ export default {
                 localStorage.setItem('access_token', response.data.access)
                 // localStorage.setItem('refresh_token', response.data.refresh)
 
-                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`; // 设置默认请求头
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`; // Set default request header
                 // axios.interceptors.response.use(response => response, error => {
                 //     if (error.response.status === 401) {
                 //         return axios.post('/rest_refresh/', {
@@ -138,13 +138,13 @@ export default {
                 console.log("3")
                 ElMessage({title: "Success", type: "success", message:  "Welcome: " + loginForm.account})
                 emitter.emit('show_menu', true)
-                router.push('/solidity'); // 登录成功后跳转到主页
+                router.push('/solidity'); // Redirect to home page after successful login
             } catch (error) {
                 ElMessage({title: "Failed", type: "danger", message:   "Login failed: " + error})
             }
         };
 
-        //注册操作
+        // Register operation
         const registerForm = reactive({
             username: "",
             email: "",
@@ -160,7 +160,7 @@ export default {
                     email: registerForm.email,
                     phone: registerForm.phone,
                 });
-                // 注册成功后可以进行页面跳转
+                // Redirect after successful registration
                 ElMessage({title: "Registration Successful", type: "success", message:  "Welcome: " + registerForm.username})
                 ElNotification({ title: "Registration Successful", message: "Please login", type: "success", position: 'top-left',})
                 router.push("/login")
@@ -241,7 +241,7 @@ $red: #F56C6C;
 $green: #67C23A;
 $yellow: #E6A23C;
 
-//app背景色
+// App background color
 $appBgColor: #fff;
 
 @mixin flex-row-center-center {
@@ -258,14 +258,14 @@ $appBgColor: #fff;
 }
 
 
-//单行溢出
+// Single line overflow
 @mixin ellipsis-singe-line {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-//多行溢出
+// Multi-line overflow
 @mixin ellipsis-multi-line($line) {
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -305,7 +305,7 @@ $appBgColor: #fff;
     background-color: var(--el-color-primary) !important;
 }
 
-/* 全局样式文件或者组件内的 <style> */
+/* Global style file or component <style> */
 .custom-primary-bg {
     background-color: var(--el-color-primary) !important;
 }
