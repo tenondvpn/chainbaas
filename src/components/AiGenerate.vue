@@ -4,12 +4,12 @@
     style="width: 100%"
     :rows="18"
     type="textarea"
-    placeholder="输入你的需求"
+    placeholder="Enter your requirements"
   />
 
   <el-divider />
 
-  <el-button type="primary" @click="aiGenerate">AI生成合约图</el-button>
+  <el-button type="primary" @click="aiGenerate">AI Generate Contract Graph</el-button>
 </template>
 
 <script lang="ts" setup>

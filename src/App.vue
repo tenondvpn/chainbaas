@@ -5,10 +5,10 @@
             <h3>SethChain-Baas</h3>
         </el-menu-item>
         <el-tooltip class="box-item" content="solidity智能合约编辑管理！">
-            <el-menu-item v-if="show_solidty" index="5" @click="toSolidty">智能合约</el-menu-item>
+            <el-menu-item v-if="show_solidty" index="5" @click="toSolidty">Smart Contract</el-menu-item>
         </el-tooltip>
         <el-menu-item index="5" style="margin-top:0px" class="no-underline">
-            <el-tooltip class="box-item" content="切换背景色！">
+            <el-tooltip class="box-item" content="Switch background color!">
                 <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left: -12px;float:right;"
                     size="default" @change="toggleDark" />
             </el-tooltip>

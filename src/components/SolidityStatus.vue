@@ -2,35 +2,35 @@
     <div style="overflow: hidden;">
         <el-button-group style="margin-top: 5px;">
             <!-- <el-button plain size="small" type="primary" :icon="DataAnalysis" @click="toCompile">编译</el-button> -->
-            <el-button plain size="small" type="primary" :icon="Operation" @click="toDeploy">部署</el-button>
-
+            <el-button plain size="small" type="primary" :icon="Operation" @click="toDeploy">Deploy</el-button>
+        
             <el-popover :visible="gas_visible" placement="top" :width="220" style="margin-top: 5px;float: right;">
-                <p>预置GAS</p>
+                <p>Preset GAS</p>
                 <el-input-number v-model="gas_prepayment" :step="1000000" />
                 <div style="text-align: right; margin-top: 20px">
-                    <el-button size="small" text @click="gas_visible = false">取消</el-button>
+                    <el-button size="small" text @click="gas_visible = false">Cancel</el-button>
                     <el-button size="small" type="primary" :loading="gas_waiting"  @click="CallGasPrepayment">
-                        确认
+                        Confirm
                     </el-button>
                 </div>
-                <template #reference>
+              <template #reference>
                     <el-button plain :disabled="contract_address == ''"  size="small" type="primary" :icon="Odometer"
-                        @click="gas_visible = true; gas_waiting = false">预置GAS</el-button>
+                        @click="gas_visible = true; gas_waiting = false">Preset GAS</el-button>
                 </template>
             </el-popover>
-            <el-button plain size="small" type="primary" :disabled="contract_address == ''" :icon="CaretLeft" @click="toCallFunction">调用函数</el-button>
+            <el-button plain size="small" type="primary" :disabled="contract_address == ''" :icon="CaretLeft" @click="toCallFunction">Call Function</el-button >
         </el-button-group>
 
         <el-popover :visible="visible" placement="top" :width="580" style="margin-top: 5px;float: right;">
-            <p>设置合约执行url</p>
-            <el-input v-model="test_url" style="width: 540px"  />
-            <p>设置私钥</p>
+            <p>Set Contract Execution URL</p>
+            <el-input v-model="test_url" style="width: 540px" />
+            <p>Set Private Key</p>
             <el-input v-model="privateKey" style="width: 540px" type="password" placeholder="Please input password"
                 show-password />
             <div style="text-align: right; margin-top: 20px">
-                <el-button size="small" text @click="visible = false">取消</el-button>
+                <el-button size="small" text @click="visible = false">Cancel</el-button>
                 <el-button size="small" type="primary" @click="toSetPrivateKey">
-                    确认
+                    Confirm
                 </el-button>
             </div>
             <template #reference>
@@ -95,8 +95,8 @@ const toSetPrivateKey = () => {
     visible.value = false
     emitter.emit('set_solidity_private_key', {"prikey": privateKey.value, "url": test_url.value} );
     ElMessage({
-        type: 'success',
-        message: '运行环境设置成功！',
+      type: 'success',
+        message: 'Runtime environment set successfully!',
     })
 }
 
@@ -108,24 +108,24 @@ const CallGasPrepayment = () => {
         "address": contract_address.value,
     })).then((response) => {
         gas_waiting.value = true
-        if (response.data.status != 0) {
+      if (response.data.status != 0) {
             ElMessage({
-                type: 'error',
-                message: '预置GAS设置失败:' + response.data.msg,
+              type: 'error',
+                message: 'Preset GAS setting failed:' + response.data.msg,
             })
             return;
         }
 
-        ElMessage({
+      ElMessage({
             type: 'success',
-            message: '预置GAS设置成功！',
+            message: 'Preset GAS set successfully!',
         })
         gas_visible.value = false
     }).catch((error) => {
         gas_waiting.value = true
         ElMessage({
             type: 'error',
-            message: '预置GAS设置失败:' + error,
+            message: 'Preset GAS setting failed:' + error,
         })
         return;
     });
@@ -145,10 +145,10 @@ const emitterOn = () => {
 emitter.on('compile_solidity_code_res', (data) => {
     textarea.value += "\n------------------------\n";
     if (data.status != 0) {
-        textarea.value += "编译错误:\n" + data.msg;
+        textarea.value += "Compilation Error:\n" + data.msg;
         textarea.value += data.msg
     } else {
-        textarea.value += "编译成功!\nABI:\n" + data.abi + "\nBytecode:\n" + data.bytecode;
+        textarea.value += "Compilation Success!\nABI:\n" + data.abi + "\nBytecode:\n" + data.bytecode;
     }
 
 
@@ -169,10 +169,10 @@ emitter.on('deploy_solidity_code_res', (data) => {
 
     textarea.value += "\n------------------------\n";
     if (data.status != 0) {
-        textarea.value += "\n部署错误:\n" + data.msg;
+        textarea.value += "\nDeployment Error:\n" + data.msg;
     } else {
         contract_address.value = data.id;
-        textarea.value += "\n部署成功!\n合约地址:\n" + data.id;
+        textarea.value += "\nDeployment Success!\nContract Address:\n" + data.id;
     }
 
     nextTick(() => {

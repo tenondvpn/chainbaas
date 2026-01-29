@@ -6,7 +6,7 @@
                     <el-carousel-item v-for="item in 4" :key="item">
                         <section class="login-intro custom-primary-bg">
                             <h1 class="intro-title">{{ appName }}</h1>
-                            <p class="intro-subtitle">欢迎登录！</p>
+                            <p class="intro-subtitle">Welcome!</p>
                             <img :src="loginImg" alt="login" />
                         </section>
                     </el-carousel-item>
@@ -17,45 +17,45 @@
                 <h1 style="margin-bottom: 10px" v-if="device == 'mobile'">
                     {{ appName }}
                 </h1>
-                <h1 style="color: var(--el-color-primary) !important;">{{ loginStatus ? "登录" : "注册" }}</h1>
+                <h1 style="color: var(--el-color-primary) !important;">{{ loginStatus ? "Login" : "Register" }}</h1>
                 <el-form :model="loginForm" class="login-form" v-show="loginStatus" label-position="top">
-                    <el-form-item label="账号">
-                        <el-input placeholder="请输入账号" v-model="loginForm.account" />
+                    <el-form-item label="Account">
+                        <el-input placeholder="Please enter account" v-model="loginForm.account" />
                     </el-form-item>
-                    <el-form-item label="密码">
-                        <el-input type="password" placeholder="请输入密码" v-model="loginForm.password" />
+                    <el-form-item label="Password">
+                        <el-input type="password" placeholder="Please enter password" v-model="loginForm.password" />
                     </el-form-item>
                     <el-form-item>
                         <el-button type="primary" class="login-btn" @click="onLoginClick" :loading="loginBtnLoading">
-                            登录
+                            Login
                         </el-button>
                         <div class="form-bottom">
                             <el-button type="text" @click="onTogglePanelStatus">
-                                注册
+                                Register
                             </el-button>
                         </div>
                     </el-form-item>
                 </el-form>
                 <el-form :model="registerForm" class="login-form" v-show="!loginStatus" label-position="top">
-                    <el-form-item label="用户名" name="username">
-                        <el-input style="color: black;" placeholder="请输入用户名" v-model="registerForm.username" />
+                    <el-form-item label="Username" name="username">
+                        <el-input style="color: black;" placeholder="Please enter username" v-model="registerForm.username" />
                     </el-form-item>
-                    <el-form-item label="密码">
-                        <el-input type="password" placeholder="请设置密码" v-model="registerForm.password" />
+                    <el-form-item label="Password">
+                        <el-input type="password" placeholder="Please set password" v-model="registerForm.password" />
                     </el-form-item>
-                    <el-form-item label="邮箱" name="email">
-                        <el-input placeholder="请输入邮箱" v-model="registerForm.email" :prefix-icon="Message" />
+                    <el-form-item label="Email" name="email">
+                        <el-input placeholder="Please enter email" v-model="registerForm.email" :prefix-icon="Message" />
                     </el-form-item>
-                    <el-form-item label="手机号码" name="phone">
-                        <el-input placeholder="请输入手机号码" v-model="registerForm.phone" :prefix-icon="Iphone" />
+                    <el-form-item label="Phone Number" name="phone">
+                        <el-input placeholder="Please enter phone number" v-model="registerForm.phone" :prefix-icon="Iphone" />
                     </el-form-item>
                     <el-form-item>
                         <el-button type="primary" class="login-btn" @click="onRegisterClick">
-                            注册
+                            Register
                         </el-button>
                         <div class="form-bottom">
                             <el-button type="text" @click="onTogglePanelStatus">
-                                密码登录
+                                Login with Password
                             </el-button>
                         </div>
                     </el-form-item>
@@ -94,7 +94,7 @@ export default {
 
         //获取验证码
         const onGetCodeClick = () => {
-            console.log("获取验证码");
+            console.log("Get Verification Code");
         };
 
         //登录操作
@@ -136,11 +136,11 @@ export default {
 
 
                 console.log("3")
-                ElMessage({title: "成功", type: "success", message:  "欢迎： " + loginForm.account})
+                ElMessage({title: "Success", type: "success", message:  "Welcome: " + loginForm.account})
                 emitter.emit('show_menu', true)
                 router.push('/solidity'); // 登录成功后跳转到主页
             } catch (error) {
-                ElMessage({title: "失败", type: "danger", message:   "登录失败：" + error})
+                ElMessage({title: "Failed", type: "danger", message:   "Login failed: " + error})
             }
         };
 
@@ -161,11 +161,11 @@ export default {
                     phone: registerForm.phone,
                 });
                 // 注册成功后可以进行页面跳转
-                ElMessage({title: "注册成功", type: "success", message:  "欢迎： " + registerForm.username})
-                ElNotification({ title: "注册成功", message: "请登录", type: "success", position: 'top-left',})
+                ElMessage({title: "Registration Successful", type: "success", message:  "Welcome: " + registerForm.username})
+                ElNotification({ title: "Registration Successful", message: "Please login", type: "success", position: 'top-left',})
                 router.push("/login")
             } catch (error) {
-                ElMessage({title: "注册失败：", type: "danger", message:  error})
+                ElMessage({title: "Registration failed: ", type: "danger", message:  error})
             }
         };
         return {

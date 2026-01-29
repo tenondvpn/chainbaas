@@ -7,13 +7,13 @@
 
     <el-dialog v-model="dialogFormVisible" :title=dialogTitle width="500">
         <el-form ref="formRef" :model="form" style="margin-top: 10px;" label-width="0px" class="dynamic-form-container">
-            <el-form-item v-if="not_constructer">
+            <el-form-item v-if="not_constructer" >
                 <el-row :gutter="37">
                     <el-col :span="7" style="padding: 0px; width: 307px; padding-left: 18px;">
-                        <el-text class="mx-1" type="info">选择函数</el-text>
+                        <el-text class="mx-1" type="info">Select Function</el-text>
                     </el-col>
                     <el-col :span="15" style="padding: 0px;">
-                        <el-select v-model="form.function" placeholder="选择函数" @change="changeFunction">
+                        <el-select v-model="form.function" placeholder="Select Function" @change="changeFunction">
                             <el-option v-for="item in otherFunctions" :key="item.name" :label="item.name"
                                 :value="item.name" />
                         </el-select>
@@ -23,7 +23,7 @@
             <el-form-item v-if="!not_constructer">
                 <el-row :gutter="37">
                     <el-col :span="7" style="padding: 0px; width: 200px; padding-left: 18px;">
-                        <el-text class="mx-1" type="info">预置GAS</el-text>
+                        <el-text class="mx-1" type="info">Preset GAS</el-text>
                     </el-col>
                     <el-col :span="15" style="padding: 0px;">
                         <el-input-number v-model="gas_prepayment" :step="1000000" />
@@ -33,7 +33,7 @@
             <el-form-item>
                 <el-row :gutter="37">
                     <el-col :span="7" style="padding: 0px; width: 200px; padding-left: 18px;">
-                        <el-text class="mx-1" type="info">金额</el-text>
+                        <el-text class="mx-1" type="info">Amount</el-text>
                     </el-col>
                     <el-col :span="15" style="padding: 0px;">
                         <el-input-number v-model="transfer_amount" :step="1000000" />
@@ -50,24 +50,24 @@
                 <el-row :gutter="37">
                     <el-col :span="4" style="padding: 0px; width: 297px; padding-left: 18px;">
                         <el-text class="mx-1" type="primary">{{ item.type }}</el-text>
-                    </el-col>
+                    </el-col >
                     <el-col :span="6" style="padding: 0px; width: 297px; padding-left: 18px;">
-                        <el-input v-model="item.key" aria-label="参数名" placeholder="参数名" />
-                    </el-col>
+                        <el-input v-model="item.key" aria-label="Parameter Name" placeholder="Parameter Name" />
+                    </el-col >
                     <el-col :span="1" style="padding: 0px;margin-left:10px;margin-right:-4px"> :
                     </el-col>
                     <el-col :span="12" style="padding: 0px;">
-                        <el-input v-model="item.value" aria-label="参数值" placeholder="参数值" />
+                        <el-input v-model="item.value" aria-label="Parameter Value" placeholder="Parameter Value" />
                     </el-col>
                 </el-row>
             </el-form-item>
         </el-form>
         <template #footer>
             <div class="dialog-footer">
-                <el-button @click="dialogFormVisible = false">取消</el-button>
+                <el-button @click="dialogFormVisible = false">Cancel</el-button>
                 <el-button type="primary" @click="confirmDialog" :loading="run_loading">
-                    执行
-                </el-button>
+                  Execute
+                </el-button >
             </div>
         </template>
     </el-dialog>
@@ -115,7 +115,7 @@ const otherFunctions = ref([])
 const dialogFormVisible = ref(false)
 const formLabelWidth = '140px'
 const not_constructer = ref(false)
-const dialogTitle = ref('填写构造函数参数')
+const dialogTitle = ref('Enter Constructor Parameters')
 const contractAddress = ref('')
 const gas_prepayment = ref(0)
 const transfer_amount = ref(0)
@@ -189,8 +189,8 @@ emitter.on('deploy_solidity_code', (code: string) => {
     not_constructer.value = false
     if (!preivateKey.value || preivateKey.value.length == 0) {
         ElMessage({
-            type: 'warning',
-            message: '请先输入私钥！',
+            type: 'Warning',
+            message: 'Please enter private key first!',
         })
         return;
     }
@@ -211,13 +211,13 @@ emitter.on('deploy_solidity_code', (code: string) => {
 
 emitter.on('call_function_solidity_code', (code: string) => {
     run_loading.value = false
-    dialogTitle.value = '调用合约函数'
+    dialogTitle.value = 'Call Contract Function'
     parseSolidity()
     form.args = []
     if (otherFunctions.value.length == 0) {
         ElMessage({
             type: 'warning',
-            message: '合约中没有可调用的函数！',
+            message: 'No callable functions in the contract!',
         })
         return;
     }
@@ -364,9 +364,9 @@ function callFunction() {
     var values = []
     for (let arg of form.args) {
         if (arg.value.trim().length == 0) {
-            ElMessage({
+          ElMessage({
                 type: 'warning',
-                message: '请填写参数：' + arg.key,
+                message: 'Please enter parameter: ' + arg.key,
             })
 
             run_loading.value = false
@@ -381,7 +381,7 @@ function callFunction() {
         if (abiFunction.inputs.length != types.length) {
             ElMessage({
                 type: 'error',
-                message: '函数调用失败，函数参数数量不匹配！',
+                message: 'Function call failed, parameter count mismatch!',
             })
             run_loading.value = false
             return;
@@ -409,7 +409,7 @@ function callFunction() {
                 if (response.data.status != 0) {
                     ElMessage({
                         type: 'error',
-                        message: '函数调用失败：' + response.data.msg,
+                        message: 'Function call failed: ' + response.data.msg,
                     })
                     return;
                 }
@@ -424,7 +424,7 @@ function callFunction() {
 
                 ElMessage({
                     type: 'success',
-                    message: '函数调用成功，返回值：' + res_data,
+                    message: 'Function call successful, return value: ' + res_data,
                 })
                 dialogFormVisible.value = false
             })
@@ -432,7 +432,7 @@ function callFunction() {
                 run_loading.value = false
                 ElMessage({
                     type: 'error',
-                    message: '函数调用失败：' + error,
+                    message: 'Function call failed: ' + error,
                 })
             })
     } else {
@@ -451,14 +451,14 @@ function callFunction() {
                 if (response.data.status != 0) {
                     ElMessage({
                         type: 'error',
-                        message: '函数调用失败：' + response.data.msg,
+                        message: 'Function call failed: ' + response.data.msg,
                     })
                     return;
                 }
 
                 ElMessage({
                     type: 'success',
-                    message: '函数调用成功，返回值：' + response.data.return_value,
+                    message: 'Function call successful, return value: ' + response.data.return_value,
                 })
                 dialogFormVisible.value = false
             })
@@ -466,7 +466,7 @@ function callFunction() {
                 run_loading.value = false
                 ElMessage({
                     type: 'error',
-                    message: '函数调用失败：' + error,
+                    message: 'Function call failed: ' + error,
                 })
             })
     }
@@ -475,15 +475,15 @@ function callFunction() {
 }
 
 function deploySolidity() {
-    dialogTitle.value = '填写构造函数参数'
+    dialogTitle.value = 'Enter Constructor Parameters'
     not_constructer.value = false
     var types = []
     var values = []
     for (let arg of form.args) {
         if (arg.value.trim().length == 0) {
             ElMessage({
-                type: 'warning',
-                message: '请填写参数：' + arg.key,
+                type: 'Warning',
+                message: 'Please enter parameter: ' + arg.key,
             })
             run_loading.value = false
             return
@@ -501,7 +501,7 @@ function deploySolidity() {
             if (response.data.status != 0) {
                 ElMessage({
                     type: 'error',
-                    message: '合约部署失败，编译错误：' + response.data.msg,
+                    message: 'Contract deployment failed, compilation error: ' + response.data.msg,
                 })
                 run_loading.value = false
                 return;
@@ -513,7 +513,7 @@ function deploySolidity() {
                 if (abiConstructor.inputs.length != types.length) {
                     ElMessage({
                         type: 'error',
-                        message: '合约部署失败，构造函数参数数量不匹配！',
+                        message: 'Contract deployment failed, constructor parameter count mismatch!',
                     })
                     run_loading.value = false
                     return;
@@ -540,14 +540,14 @@ function deploySolidity() {
                     if (response.data.status != 0) {
                         ElMessage({
                             type: 'error',
-                            message: '合约部署失败：' + response.data.msg,
+                            message: 'Contract deployment failed: ' + response.data.msg,
                         })
                         return;
                     }
 
                     ElMessage({
                         type: 'success',
-                        message: '合约部署成功，合约地址：' + response.data.id,
+                        message: 'Contract deployment successful, contract address: ' + response.data.id,
                     })
                     dialogFormVisible.value = false
                     contractAddress.value = response.data.id;
@@ -558,7 +558,7 @@ function deploySolidity() {
                 .catch(error => {
                     ElMessage({
                         type: 'error',
-                        message: '合约部署失败：' + error,
+                        message: 'Contract deployment failed: ' + error,
                     })
                 })
         })
@@ -566,7 +566,7 @@ function deploySolidity() {
             run_loading.value = false
             ElMessage({
                 type: 'error',
-                message: '合约部署失败：' + error,
+                message: 'Contract deployment failed: ' + error,
             })
         })
 }
@@ -605,7 +605,7 @@ function parseSolidity() {
         console.log('Other Functions:', otherFunctions.value);
 
     } catch (error) {
-        console.error('解析错误:', error);
+        console.error('Parse error:', error);
     }
 }
 
@@ -739,25 +739,25 @@ const soliditySnippets = [
         label: 'contract',
         type: 'keyword',
         apply: `contract \${1:ContractName} {\n    \${0}\n}`,
-        detail: '创建新合约'
+        detail: 'Create new contract'
     },
     {
         label: 'function',
         type: 'function',
         apply: `function \${1:functionName}() public \${2|view,pure|} returns (\${3}) {\n    \${0}\n}`,
-        detail: '函数定义'
+        detail: 'Function definition'
     },
     {
         label: 'event',
         type: 'keyword',
         apply: `event \${1:EventName}(\${2});`,
-        detail: '事件定义'
+        detail: 'Event definition'
     },
     {
         label: 'modifier',
         type: 'keyword',
         apply: `modifier \${1:modifierName} {\n    \${0}\n    _;\n}`,
-        detail: '修饰器定义'
+        detail: 'Modifier definition'
     }
 ]
 
@@ -1122,7 +1122,7 @@ watch(codeValue, (newValue) => {
 .compile-panel {
     border-top: 1px solid #e1e5e9;
     background: #d4edda;
-}
+} 
 
 .compile-panel.error {
     background: #f8d7da;
