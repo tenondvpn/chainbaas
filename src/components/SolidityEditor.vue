@@ -315,7 +315,6 @@ function decodeOutput(abi, functionName, outputHex) {
 
     const outputType = funcAbi.outputs[0].type;
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
-
     return abiDecode(outputType, cleanHex);
 }
 
@@ -417,6 +416,8 @@ function callFunction() {
                 var res_data = response.data.return_value;
                 try {
                     res_data = decodeOutput(abiJson.value, form.function,  response.data.return_value);
+                    console.log(abiJson.value, form.function,  response.data.return_value, res_data)
+
                     // Output: Function name() return value: test
                 } catch (err) {
                     console.error("Parsing failed:", err.message);
