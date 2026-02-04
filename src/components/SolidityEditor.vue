@@ -417,6 +417,7 @@ function callFunction() {
                 var res_data = response.data.return_value;
                 try {
                     res_data = decodeOutput(abiJson.value, form.function,  response.data.return_value);
+                    console.log("Decoded output:", res_data, abiJson.value, form.function,  response.data.return_value);
                     // Output: Function name() return value: test
                 } catch (err) {
                     console.error("Parsing failed:", err.message);
