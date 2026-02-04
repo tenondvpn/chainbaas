@@ -297,66 +297,67 @@ function confirmDialog() {
 }
 
 function decodeOutput(abi, functionName, outputHex) {
-    // Find corresponding function ABI item
     const funcAbi = abi.find(item => 
-        item.type === "function" && 
-        item.name === functionName &&
-        item.outputs && item.outputs.length > 0
+        item.type === "function" && item.name === functionName
     );
 
-    if (!funcAbi) {
-        throw new Error(`Function ${functionName} not found in ABI`);
+    if (!funcAbi || !funcAbi.outputs) {
+        throw new Error(`Function ${functionName} not found or has no outputs`);
     }
 
-    // Only supports single return value (as most view functions do)
-    if (funcAbi.outputs.length !== 1) {
-        console.warn("Warning: Multiple outputs detected, only returning the first one.");
-    }
-
-    const outputType = funcAbi.outputs[0].type;
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
+    const resultObj = {};
 
-    return abiDecode(outputType, cleanHex);
+    // 记录解析进度
+    let currentPointer = 0;
+
+    funcAbi.outputs.forEach((output, index) => {
+        const key = output.name || `arg${index}`;
+        const type = output.type;
+
+        // 获取该字段的数据（EVM 每个槽位 64 字符/32 字节）
+        // 注意：这里简化处理，假设是静态类型或处理偏移量
+        // 如果要完美支持 address[]，建议使用 ethers.js 的 Interface
+        try {
+            const rawChunk = cleanHex.slice(currentPointer);
+            resultObj[key] = complexDecode(type, rawChunk, cleanHex);
+            
+            // 静态类型移动指针，动态类型（数组/string）在简单实现中通常需要根据偏移量跳转
+            currentPointer += 64; 
+        } catch (e) {
+            resultObj[key] = null;
+        }
+    });
+
+    // 返回格式化的 JSON 字符串
+    return JSON.stringify(resultObj, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value, 
+    2);
 }
 
-// Simple ABI decoder (supports uint, bool, address, string, bytes)
-function abiDecode(type, hexData) {
-    const data = hexData.toLowerCase();
-
-    if (type === "string") {
-        // Dynamic type: read offset -> read length -> read data
-        const offset = parseInt(data.slice(0, 64), 16);           // 0x20 = 32 bytes
-        const length = parseInt(data.slice(offset * 2, offset * 2 + 64), 16);
-        const stringDataHex = data.slice(offset * 2 + 64, offset * 2 + 64 + length * 2);
+// 增强版解码器，支持简单的动态数组
+function complexDecode(type, chunk, fullHex) {
+    if (type.endsWith('[]')) {
+        // 动态数组解析：read offset -> read length -> loop read items
+        const offset = parseInt(chunk.slice(0, 64), 16) * 2;
+        const length = parseInt(fullHex.slice(offset, offset + 64), 16);
+        const itemType = type.replace('[]', '');
+        const items = [];
         
-        // Convert every two characters to bytes, then to UTF-8 string
-        let str = '';
-        for (let i = 0; i < stringDataHex.length; i += 2) {
-            str += String.fromCharCode(parseInt(stringDataHex.substr(i, 2), 16));
+        for (let i = 0; i < length; i++) {
+            const itemHex = fullHex.slice(offset + 64 + (i * 64), offset + 128 + (i * 64));
+            items.push(simpleItemDecode(itemType, itemHex));
         }
-        return str;
-
-    } else if (type.startsWith("uint") || type.startsWith("int")) {
-        // Static numeric type: last 64 bits are the value
-        const valueHex = data.slice(-64);
-        return BigInt('0x' + valueHex).toString();
-
-    } else if (type === "bool") {
-        const valueHex = data.slice(-64);
-        return parseInt(valueHex, 16) !== 0;
-
-    } else if (type === "address") {
-        const addr = data.slice(-64).padStart(64, '0');
-        return '0x' + addr.slice(-40);
-
-    } else if (type === "bytes") {
-        const offset = parseInt(data.slice(0, 64), 16);
-        const length = parseInt(data.slice(offset * 2, offset * 2 + 64), 16);
-        return '0x' + data.slice(offset * 2 + 64, offset * 2 + 64 + length * 2);
-
-    } else {
-        return `[Unsupported type: ${type}] Raw: 0x${data}`;
+        return items;
     }
+    return simpleItemDecode(type, chunk.slice(0, 64));
+}
+
+function simpleItemDecode(type, data) {
+    if (type === "address") return '0x' + data.slice(-40);
+    if (type.startsWith("uint") || type.startsWith("int")) return BigInt('0x' + data).toString();
+    if (type === "bool") return parseInt(data, 16) !== 0;
+    return data;
 }
 
 function callFunction() {
