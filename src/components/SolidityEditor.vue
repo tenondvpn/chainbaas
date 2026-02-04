@@ -108,7 +108,7 @@ const currentColumn = ref(1)
 const compileResult = ref(null)
 const editorContainer = ref(null)
 const editorElement = ref(null)
-const preivateKey = ref('73cc68053322814403e2e549a0fac941f9c04f64b78420967ceabda6f30c95b8')
+const preivateKey = ref('c75f8d9b2a6bc0fe68eac7fef67c6b6f7c4f85163d58829b59110ff9e9210848')
 var editorView = ref()
 const constructor = ref(null)
 const otherFunctions = ref([])
@@ -315,6 +315,7 @@ function decodeOutput(abi, functionName, outputHex) {
 
     const outputType = funcAbi.outputs[0].type;
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
+
     return abiDecode(outputType, cleanHex);
 }
 
@@ -416,8 +417,6 @@ function callFunction() {
                 var res_data = response.data.return_value;
                 try {
                     res_data = decodeOutput(abiJson.value, form.function,  response.data.return_value);
-                    console.log(abiJson.value, form.function,  response.data.return_value, res_data)
-
                     // Output: Function name() return value: test
                 } catch (err) {
                     console.error("Parsing failed:", err.message);
