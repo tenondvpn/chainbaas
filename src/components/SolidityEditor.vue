@@ -308,64 +308,77 @@ function decodeOutput(abi, functionName, outputHex) {
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
     const resultObj = {};
 
-    // 记录解析进度
-    let currentPointer = 0;
-
     funcAbi.outputs.forEach((output, index) => {
-        // 优先使用 ABI 定义的 name，如果没有则使用 arg+索引
         const key = output.name || `arg${index}`;
-        const type = output.type;
-
-        try {
-            const rawChunk = cleanHex.slice(currentPointer);
-            // 调用增强版解码器处理数据
-            resultObj[key] = complexDecode(type, rawChunk, cleanHex);
-            
-            // 每次移动 32 字节（64位 16进制字符）
-            currentPointer += 64; 
-        } catch (e) {
-            console.error(`Error decoding ${key}:`, e.message);
-            resultObj[key] = null;
-        }
+        // 传入整个 output 对象以获取内部 components（针对 tuple）
+        resultObj[key] = complexDecode(output, cleanHex.slice(index * 64), cleanHex);
     });
 
-    /**
-     * 关键修改：
-     * 1. 增加 BigInt 转换逻辑，防止 JSON.stringify 报错。
-     * 2. 第三个参数为 2，确保输出带缩进的“美观”JSON 字符串。
-     */
-    return JSON.stringify(resultObj, (key, value) => {
-        if (typeof value === 'bigint') return value.toString();
-        return value;
-    }, 2);
+    return JSON.stringify(resultObj, (key, value) => 
+        typeof value === 'bigint' ? value.toString() : value, 2
+    );
 }
 
-// 增强版解码器逻辑保持不变，用于处理动态数组
-function complexDecode(type, chunk, fullHex) {
+function complexDecode(output, chunk, fullHex) {
+    const type = output.type;
+
+    // 1. 处理动态数组 (如 tuple[] 或 address[])
     if (type.endsWith('[]')) {
         const offset = parseInt(chunk.slice(0, 64), 16) * 2;
-        // 增加安全检查，防止 offset 超出 fullHex 长度
-        if (offset + 64 > fullHex.length) return [];
-        
         const length = parseInt(fullHex.slice(offset, offset + 64), 16);
-        const itemType = type.replace('[]', '');
+        const baseType = type.replace('[]', '');
         const items = [];
         
-        for (let i = 0; i < length; i++) {
-            const itemHex = fullHex.slice(offset + 64 + (i * 64), offset + 128 + (i * 64));
-            items.push(simpleItemDecode(itemType, itemHex));
+        // 修改：如果是结构体数组 tuple[]
+        if (baseType === 'tuple') {
+            const structSize = output.components.length * 64; // 每个 tuple 占用的固定空间
+            for (let i = 0; i < length; i++) {
+                // 计算当前 tuple 在 fullHex 中的起始位置
+                const itemStart = offset + 64 + (i * structSize);
+                const structData = {};
+                
+                output.components.forEach((comp, j) => {
+                    const compChunk = fullHex.slice(itemStart + (j * 64));
+                    structData[comp.name] = complexDecode(comp, compChunk, fullHex);
+                });
+                items.push(structData);
+            }
+        } else {
+            // 普通数组 (address[], uint256[])
+            for (let i = 0; i < length; i++) {
+                const itemHex = fullHex.slice(offset + 64 + (i * 64), offset + 128 + (i * 64));
+                items.push(simpleItemDecode(baseType, itemHex));
+            }
         }
         return items;
     }
+
+    // 2. 处理动态字符串 (string)
+    if (type === 'string') {
+        const offset = parseInt(chunk.slice(0, 64), 16) * 2;
+        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2; // 1 byte = 2 hex chars
+        const contentHex = fullHex.slice(offset + 64, offset + 64 + length);
+        return hexToUtf8(contentHex);
+    }
+
+    // 3. 处理基本类型
     return simpleItemDecode(type, chunk.slice(0, 64));
 }
 
-function simpleItemDecode(type, data) {
-    if (!data) return null;
-    if (type === "address") return '0x' + data.slice(-40);
-    if (type.startsWith("uint") || type.startsWith("int")) return BigInt('0x' + data).toString();
-    if (type === "bool") return parseInt(data, 16) !== 0;
-    return data;
+function simpleItemDecode(type, hex) {
+    if (type === 'address') return '0x' + hex.slice(24).toLowerCase();
+    if (type === 'uint256') return BigInt('0x' + hex);
+    if (type === 'bytes32') return '0x' + hex;
+    if (type === 'bool') return parseInt(hex, 16) !== 0;
+    return hex;
+}
+
+function hexToUtf8(hex) {
+    let str = '';
+    for (let i = 0; i < hex.length; i += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    }
+    return str.replace(/\0/g, ''); // 移除填充的空字符
 }
 
 function callFunction() {
