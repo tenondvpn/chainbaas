@@ -302,7 +302,7 @@ function decodeOutput(abi, functionName, outputHex) {
     );
 
     if (!funcAbi || !funcAbi.outputs) {
-        throw new Error(`Function ${functionName} not found or has no outputs`);
+        throw new Error(`Function ${functionName} not found`);
     }
 
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
@@ -310,8 +310,9 @@ function decodeOutput(abi, functionName, outputHex) {
 
     funcAbi.outputs.forEach((output, index) => {
         const key = output.name || `arg${index}`;
-        // 传入整个 output 对象以获取内部 components（针对 tuple）
-        resultObj[key] = complexDecode(output, cleanHex.slice(index * 64), cleanHex);
+        // 关键：传入当前的 32 字节块，以及完整的十六进制字符串用于跳转
+        const currentChunk = cleanHex.slice(index * 64, (index + 1) * 64);
+        resultObj[key] = complexDecode(output, currentChunk, cleanHex);
     });
 
     return JSON.stringify(resultObj, (key, value) => 
@@ -322,31 +323,38 @@ function decodeOutput(abi, functionName, outputHex) {
 function complexDecode(output, chunk, fullHex) {
     const type = output.type;
 
-    // 1. 处理动态数组 (如 tuple[] 或 address[])
+    // 1. 处理动态数组 (例如 DataRecord[])
     if (type.endsWith('[]')) {
-        const offset = parseInt(chunk.slice(0, 64), 16) * 2;
+        // 第一步：读取偏移量，找到数组长度所在的位置
+        const offset = parseInt(chunk, 16) * 2; 
         const length = parseInt(fullHex.slice(offset, offset + 64), 16);
+        
         const baseType = type.replace('[]', '');
         const items = [];
         
-        // 修改：如果是结构体数组 tuple[]
+        // 数组内容的起始位置（长度字段之后）
+        const dataStart = offset + 64;
+
         if (baseType === 'tuple') {
-            const structSize = output.components.length * 64; // 每个 tuple 占用的固定空间
+            // 计算每个 tuple 内部字段的总数（5个字段：hash, prev, owner, time, meta）
+            const fieldsCount = output.components.length;
+            
             for (let i = 0; i < length; i++) {
-                // 计算当前 tuple 在 fullHex 中的起始位置
-                const itemStart = offset + 64 + (i * structSize);
                 const structData = {};
+                // 计算当前元素在数组中的起始位置
+                const currentElementStart = dataStart + (i * fieldsCount * 64);
                 
                 output.components.forEach((comp, j) => {
-                    const compChunk = fullHex.slice(itemStart + (j * 64));
-                    structData[comp.name] = complexDecode(comp, compChunk, fullHex);
+                    const fieldChunk = fullHex.slice(currentElementStart + (j * 64), currentElementStart + (j + 1) * 64);
+                    // 递归调用，因为 metadata 字符串可能还有自己的偏移量
+                    structData[comp.name] = complexDecode(comp, fieldChunk, fullHex.slice(currentElementStart));
                 });
                 items.push(structData);
             }
         } else {
-            // 普通数组 (address[], uint256[])
+            // 普通类型数组
             for (let i = 0; i < length; i++) {
-                const itemHex = fullHex.slice(offset + 64 + (i * 64), offset + 128 + (i * 64));
+                const itemHex = fullHex.slice(dataStart + (i * 64), dataStart + (i + 1) * 64);
                 items.push(simpleItemDecode(baseType, itemHex));
             }
         }
@@ -355,30 +363,35 @@ function complexDecode(output, chunk, fullHex) {
 
     // 2. 处理动态字符串 (string)
     if (type === 'string') {
-        const offset = parseInt(chunk.slice(0, 64), 16) * 2;
-        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2; // 1 byte = 2 hex chars
+        // 这里的 chunk 存的是相对于当前上下文位置的偏移量
+        const offset = parseInt(chunk, 16) * 2;
+        // 注意：在 tuple 内部，偏移量是相对于 tuple 自身的起始位置
+        // 如果上面递归传的是 fullHex.slice(currentElementStart)，这里的计算就成立
+        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2;
         const contentHex = fullHex.slice(offset + 64, offset + 64 + length);
         return hexToUtf8(contentHex);
     }
 
     // 3. 处理基本类型
-    return simpleItemDecode(type, chunk.slice(0, 64));
+    return simpleItemDecode(type, chunk);
 }
 
 function simpleItemDecode(type, hex) {
+    if (!hex) return null;
     if (type === 'address') return '0x' + hex.slice(24).toLowerCase();
     if (type === 'uint256') return BigInt('0x' + hex);
     if (type === 'bytes32') return '0x' + hex;
-    if (type === 'bool') return parseInt(hex, 16) !== 0;
     return hex;
 }
 
 function hexToUtf8(hex) {
     let str = '';
     for (let i = 0; i < hex.length; i += 2) {
-        str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+        const charCode = parseInt(hex.substr(i, 2), 16);
+        if (charCode === 0) continue;
+        str += String.fromCharCode(charCode);
     }
-    return str.replace(/\0/g, ''); // 移除填充的空字符
+    return str;
 }
 
 function callFunction() {
