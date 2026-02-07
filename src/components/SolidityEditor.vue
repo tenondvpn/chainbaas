@@ -301,16 +301,14 @@ function decodeOutput(abi, functionName, outputHex) {
         item.type === "function" && item.name === functionName
     );
 
-    if (!funcAbi || !funcAbi.outputs) {
-        throw new Error(`Function ${functionName} not found`);
-    }
+    if (!funcAbi || !funcAbi.outputs) return "No outputs";
 
     const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
     const resultObj = {};
 
     funcAbi.outputs.forEach((output, index) => {
         const key = output.name || `arg${index}`;
-        // 关键：传入当前的 32 字节块，以及完整的十六进制字符串用于跳转
+        // 这里的 chunk 是当前位置的 32 字节
         const currentChunk = cleanHex.slice(index * 64, (index + 1) * 64);
         resultObj[key] = complexDecode(output, currentChunk, cleanHex);
     });
@@ -323,61 +321,70 @@ function decodeOutput(abi, functionName, outputHex) {
 function complexDecode(output, chunk, fullHex) {
     const type = output.type;
 
-    // 1. 处理动态数组 (例如 DataRecord[])
+    // --- 场景 1: 处理动态数组 tuple[] ---
     if (type.endsWith('[]')) {
-        // 第一步：读取偏移量，找到数组长度所在的位置
-        const offset = parseInt(chunk, 16) * 2; 
+        const offset = parseInt(chunk, 16) * 2; // 指向长度所在位置
         const length = parseInt(fullHex.slice(offset, offset + 64), 16);
-        
         const baseType = type.replace('[]', '');
-        const items = [];
         
-        // 数组内容的起始位置（长度字段之后）
-        const dataStart = offset + 64;
+        const items = [];
+        const arrayBodyStart = offset + 64; // 长度之后紧跟内容
 
-        if (baseType === 'tuple') {
-            // 计算每个 tuple 内部字段的总数（5个字段：hash, prev, owner, time, meta）
-            const fieldsCount = output.components.length;
-            
-            for (let i = 0; i < length; i++) {
-                const structData = {};
-                // 计算当前元素在数组中的起始位置
-                const currentElementStart = dataStart + (i * fieldsCount * 64);
+        for (let i = 0; i < length; i++) {
+            if (baseType === 'tuple') {
+                // tuple[] 的每个元素在 Head 部分占用一个偏移量或固定空间
+                // 对于 struct，这里通常是相对数组内容起始处的偏移量
+                const itemHeadPointer = arrayBodyStart + (i * 64);
+                const itemDataChunk = fullHex.slice(itemHeadPointer, itemHeadPointer + 64);
                 
-                output.components.forEach((comp, j) => {
-                    const fieldChunk = fullHex.slice(currentElementStart + (j * 64), currentElementStart + (j + 1) * 64);
-                    // 递归调用，因为 metadata 字符串可能还有自己的偏移量
-                    structData[comp.name] = complexDecode(comp, fieldChunk, fullHex.slice(currentElementStart));
-                });
-                items.push(structData);
-            }
-        } else {
-            // 普通类型数组
-            for (let i = 0; i < length; i++) {
-                const itemHex = fullHex.slice(dataStart + (i * 64), dataStart + (i + 1) * 64);
+                // 递归解析 tuple 内容
+                items.push(decodeTuple(output.components, itemDataChunk, fullHex.slice(arrayBodyStart)));
+            } else {
+                const itemHex = fullHex.slice(arrayBodyStart + (i * 64), arrayBodyStart + (i + 1) * 64);
                 items.push(simpleItemDecode(baseType, itemHex));
             }
         }
         return items;
     }
 
-    // 2. 处理动态字符串 (string)
-    if (type === 'string') {
-        // 这里的 chunk 存的是相对于当前上下文位置的偏移量
-        const offset = parseInt(chunk, 16) * 2;
-        // 注意：在 tuple 内部，偏移量是相对于 tuple 自身的起始位置
-        // 如果上面递归传的是 fullHex.slice(currentElementStart)，这里的计算就成立
-        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2;
-        const contentHex = fullHex.slice(offset + 64, offset + 64 + length);
-        return hexToUtf8(contentHex);
+    // --- 场景 2: 处理独立 tuple ---
+    if (type === 'tuple') {
+        return decodeTuple(output.components, chunk, fullHex);
     }
 
-    // 3. 处理基本类型
+    // --- 场景 3: 处理独立字符串 ---
+    if (type === 'string') {
+        const offset = parseInt(chunk, 16) * 2;
+        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2;
+        return hexToUtf8(fullHex.slice(offset + 64, offset + 64 + length));
+    }
+
     return simpleItemDecode(type, chunk);
 }
 
+/**
+ * 专门解析结构体 (tuple)
+ * @param components ABI 定义的组件
+ * @param chunk 当前位置数据
+ * @param scopeHex 当前作用域的十六进制数据（用于处理相对偏移）
+ */
+function decodeTuple(components, chunk, scopeHex) {
+    const structData = {};
+    const offsetInScope = parseInt(chunk, 16) * 2;
+    
+    components.forEach((comp, j) => {
+        // 每个字段在 Head 中占用 32 字节
+        const fieldHeadPos = offsetInScope + (j * 64);
+        const fieldChunk = scopeHex.slice(fieldHeadPos, fieldHeadPos + 64);
+        
+        // 关键：对于 tuple 内部的字符串，其偏移量是相对于 tuple 起始位置的
+        structData[comp.name] = complexDecode(comp, fieldChunk, scopeHex.slice(offsetInScope));
+    });
+    return structData;
+}
+
 function simpleItemDecode(type, hex) {
-    if (!hex) return null;
+    if (!hex || hex === "") return null;
     if (type === 'address') return '0x' + hex.slice(24).toLowerCase();
     if (type === 'uint256') return BigInt('0x' + hex);
     if (type === 'bytes32') return '0x' + hex;
@@ -391,7 +398,7 @@ function hexToUtf8(hex) {
         if (charCode === 0) continue;
         str += String.fromCharCode(charCode);
     }
-    return str;
+    return decodeURIComponent(escape(str)); // 更好地处理中文字符
 }
 
 function callFunction() {
