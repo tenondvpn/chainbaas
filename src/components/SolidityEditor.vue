@@ -582,6 +582,7 @@ function deploySolidity() {
                 }))
                 .then(response => {
                     emitter.emit('deploy_solidity_code_res', response.data);
+                    dialogFormVisible.value = false
                     if (response.data.status != 0) {
                         ElMessage({
                             type: 'error',
@@ -594,7 +595,6 @@ function deploySolidity() {
                         type: 'success',
                         message: 'Contract deployment successful, contract address: ' + response.data.id,
                     })
-                    dialogFormVisible.value = false
                     contractAddress.value = response.data.id;
                     prev_save_graph_tm_ms = 0;
                     prev_saved_code.value = "";
