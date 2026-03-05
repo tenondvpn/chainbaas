@@ -203,6 +203,7 @@ emitter.on('deploy_solidity_code', (code: string) => {
             key: param.name,
             value: ''
         }));
+        run_loading.value = false;
         dialogFormVisible.value = true;
     } else {
         deploySolidity();
@@ -224,6 +225,7 @@ emitter.on('call_function_solidity_code', (code: string) => {
 
     form.function = otherFunctions.value[0].name
     changeFunction()
+    run_loading.value = false;
     dialogFormVisible.value = true;
     not_constructer.value = true
 });
@@ -521,7 +523,6 @@ function callFunction() {
 
 function deploySolidity() {
     dialogTitle.value = 'Enter Constructor Parameters'
-    run_loading.value = false
     not_constructer.value = false
     var types = []
     var values = []
