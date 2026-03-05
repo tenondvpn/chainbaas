@@ -521,6 +521,7 @@ function callFunction() {
 
 function deploySolidity() {
     dialogTitle.value = 'Enter Constructor Parameters'
+    dialogFormVisible.value = false
     not_constructer.value = false
     var types = []
     var values = []
