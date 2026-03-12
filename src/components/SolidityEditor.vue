@@ -577,6 +577,7 @@ function deploySolidity() {
                     'bytecode': response.data.bytecode,
                     'private_key': preivateKey.value,
                     'code_type': 0,
+                    'to': contractAddress.value,
                     'function_types': types.join(','),
                     'function_args': values.join(','),
                     'amount': transfer_amount.value,
