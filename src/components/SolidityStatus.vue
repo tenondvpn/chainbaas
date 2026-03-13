@@ -62,7 +62,7 @@ import qs from 'qs';
 const textarea = ref('')
 const contract_address = ref('')
 const visible = ref(false)
-const privateKey = ref('c75f8d9b2a6bc0fe68eac7fef67c6b6f7c4f85163d58829b59110ff9e9210848')
+const privateKey = ref('ff9f7083546b97ef0cafd6930c954d0b73bcb53de25400df2658c6c61cdfbadf')
 const test_url = ref('http://192.168.56.136:7001')
 const logArea = ref(null);
 const gas_visible = ref(false)
