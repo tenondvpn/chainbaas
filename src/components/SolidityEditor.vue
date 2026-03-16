@@ -263,6 +263,7 @@ function isValidJSON(str) {
 }
 
 const update_graph = (data) => {
+    contractAddress.value = '';
     emitter.emit('deploy_solidity_code_res', {"status": 0, "id": ""});
     if (data["data"]["is_project"] == 1) {
         return
