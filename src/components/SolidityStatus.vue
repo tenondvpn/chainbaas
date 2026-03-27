@@ -170,10 +170,10 @@ emitter.on('deploy_solidity_code_res', (data) => {
 
     textarea.value += "\n------------------------\n";
     if (data.status != 0) {
-        textarea.value += "\nDeployment Error:\n" + data.msg;
+        textarea.value += "\nDeployment Error: " + data.id;
     } else {
         contract_address.value = data.id;
-        textarea.value += "\n Deployment Success! \n Contract Address: \n" + data.id;
+        textarea.value += "\n Deployment Success! \n Contract Address: " + data.id;
     }
 
     nextTick(() => {
