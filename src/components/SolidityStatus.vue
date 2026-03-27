@@ -172,7 +172,7 @@ emitter.on('deploy_solidity_code_res', (data) => {
         textarea.value += "\nDeployment Error:\n" + data.msg;
     } else {
         contract_address.value = data.id;
-        textarea.value += "\nDeployment Success!\nContract Address:\n" + data.id;
+        textarea.value += "\n Deployment Success! \n Contract Address: \n" + data.id;
     }
 
     nextTick(() => {

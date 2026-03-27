@@ -264,7 +264,7 @@ function isValidJSON(str) {
 
 const update_graph = (data) => {
     contractAddress.value = '';
-    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": ""});
+    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "waiting check contract status..."});
     if (data["data"]["is_project"] == 1) {
         return
     }
@@ -289,6 +289,7 @@ const update_graph = (data) => {
                 ElMessage({
                     type: 'error',
                     message: 'get contract failed: ' + error,
+                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "The contract has not been deployed."});
                 })
             })
         } else {
