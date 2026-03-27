@@ -283,14 +283,18 @@ const update_graph = (data) => {
             }))
             .then(response => {
                 console.log("get contract: ", response.data)
-                emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.addr});
+                if (response.data.status != 0) {
+                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
+                } else {
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.addr});
+                }
             })
             .catch(error => {
                 ElMessage({
                     type: 'error',
                     message: 'get contract failed: ' + error,
-                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "The contract has not been deployed."});
                 })
+                emitter.emit('deploy_solidity_code_res', {"status": 1, "id": 'get contract failed: ' + error});
             })
         } else {
             codeValue.value = data["data"]["pipe_usr_graph"]
