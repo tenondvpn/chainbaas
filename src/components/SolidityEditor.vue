@@ -282,11 +282,11 @@ const update_graph = (data) => {
                 'address': obj["address"]
             }))
             .then(response => {
-                console.log("get contract: ", response.data)
+                console.log("get contract: ", response.data.data, response.data.data.addr)
                 if (response.data.status != 0) {
                     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
                 } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.addr});
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.data.addr});
                 }
             })
             .catch(error => {
