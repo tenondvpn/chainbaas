@@ -278,7 +278,20 @@ const update_graph = (data) => {
             contractAddress.value = obj["address"]
             abiJson.value = JSON.parse(obj["abi"])
             console.log("get abi: ", obj["abi"])
-            emitter.emit('deploy_solidity_code_res', {"status": 0, "id": obj["address"]});
+            axios
+            .post('/pipeline/get_contract_info/', qs.stringify({
+                'address': obj["address"]
+            }))
+            .then(response => {
+                console.log("get contract: ", response.data)
+                emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.addr});
+            })
+            .catch(error => {
+                ElMessage({
+                    type: 'error',
+                    message: 'get contract failed: ' + error,
+                })
+            })
         } else {
             codeValue.value = data["data"]["pipe_usr_graph"]
         }
