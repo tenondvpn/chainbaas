@@ -277,9 +277,8 @@ const update_graph = (data) => {
             codeValue.value = obj["code"]
             contractAddress.value = obj["address"]
             abiJson.value = JSON.parse(obj["abi"])
-            console.log("get abi: ", obj["abi"])
-            axios
-            .post('/pipeline/get_contract_info/', qs.stringify({
+            console.log("test get abi: ", obj["abi"])
+            axios.post('/pipeline/get_contract_info/', qs.stringify({
                 'address': obj["address"]
             }))
             .then(response => {
