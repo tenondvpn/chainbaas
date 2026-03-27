@@ -264,7 +264,7 @@ function isValidJSON(str) {
 
 const update_graph = (data) => {
     contractAddress.value = '';
-    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "waiting check contract status..."});
+    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": ""});
     if (data["data"]["is_project"] == 1) {
         return
     }
