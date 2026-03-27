@@ -262,6 +262,21 @@ function isValidJSON(str) {
   }
 }
 
+const base64ToHex = (base64Str) => {
+  // 1. 使用 atob 将 base64 解码为二进制字符串
+  const raw = atob(base64Str);
+  
+  let result = '';
+  for (let i = 0; i < raw.length; i++) {
+    // 2. 获取每个字符的 ASCII 码，转为 16 进制
+    const hex = raw.charCodeAt(i).toString(16);
+    // 3. 补齐两位（例如 'a' 变为 '0a'）
+    result += (hex.length === 2 ? hex : '0' + hex);
+  }
+  
+  return result.toUpperCase();
+};
+
 const update_graph = (data) => {
     contractAddress.value = '';
     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": ""});
@@ -282,11 +297,11 @@ const update_graph = (data) => {
                 'address': obj["address"]
             }))
             .then(response => {
-                console.log("get contract: ", response.data.data, response.data.data.addr)
+                console.log("get contract: ", response.data.data)
                 if (response.data.status != 0) {
                     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
                 } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.data.addr});
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": base64ToHex(response.data.data.addr)});
                 }
             })
             .catch(error => {
