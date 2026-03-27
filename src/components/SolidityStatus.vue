@@ -75,6 +75,7 @@ const toCompile = () => {
 
 onMounted(() => {
     // axios.defaults.baseURL = test_url.value;
+    textarea.value = "";
     emitterOn();
 });
 
