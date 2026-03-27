@@ -262,19 +262,21 @@ function isValidJSON(str) {
   }
 }
 
-const base64ToHex = (base64Str) => {
-  // 1. 使用 atob 将 base64 解码为二进制字符串
-  const raw = atob(base64Str);
-  
-  let result = '';
-  for (let i = 0; i < raw.length; i++) {
-    // 2. 获取每个字符的 ASCII 码，转为 16 进制
-    const hex = raw.charCodeAt(i).toString(16);
-    // 3. 补齐两位（例如 'a' 变为 '0a'）
-    result += (hex.length === 2 ? hex : '0' + hex);
+const base64ToHexLower = (base64Str) => {
+  if (!base64Str) return '';
+  try {
+    // 1. atob 解码 Base64
+    const raw = atob(base64Str);
+    
+    // 2. 转换为字节数组并映射为 16 进制小写
+    return Array.from(raw)
+      .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('')
+      .toLowerCase(); // 关键点：统一小写
+  } catch (e) {
+    console.error("Base64 格式无效:", e);
+    return '';
   }
-  
-  return result.toUpperCase();
 };
 
 const update_graph = (data) => {
@@ -301,7 +303,7 @@ const update_graph = (data) => {
                 if (response.data.status != 0) {
                     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
                 } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": base64ToHex(response.data.data.addr)});
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": base64ToHexLower(response.data.data.addr)});
                 }
             })
             .catch(error => {
