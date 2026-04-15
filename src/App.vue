@@ -7,6 +7,9 @@
         <el-tooltip class="box-item" content="Solidity smart contract editing and management!">
             <el-menu-item v-if="show_solidty" index="5" @click="toSolidty">Smart Contract</el-menu-item>
         </el-tooltip>
+        <el-tooltip class="box-item" content="Get test tokens from the faucet!">
+            <el-menu-item index="6" @click="toFaucet">Faucet</el-menu-item>
+        </el-tooltip>
         <el-menu-item index="5" style="margin-top:0px" class="no-underline">
             <el-tooltip class="box-item" content="Switch background color!">
                 <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left: -12px;float:right;"
@@ -126,6 +129,10 @@ const handleCommand = async (command) => {
 
 const toSolidty = () => {
     router.push('/solidity');
+}
+
+const toFaucet = () => {
+    router.push('/faucet');
 }
 
 const handleLogout = async () => {

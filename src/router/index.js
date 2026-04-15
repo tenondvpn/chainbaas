@@ -5,10 +5,12 @@ import Login from '../components/Login.vue';
 import Userinfo from '../components/UserInfo.vue'; // Page to redirect after login
 import emitter from '../components/EventBus';
 import Solidity from '../components/Solidity.vue';
+import Faucet from '../components/Faucet.vue';
 
 const routes = [
   { path: '/register', component: Register },
   { path: '/login', component: Login },
+  { path: '/faucet', component: Faucet },
   { path: '/userinfo', component: Userinfo, meta: { requiresAuth: true } },
   { path: '/solidity', component: Solidity, meta: { requiresAuth: true } },
 ];
@@ -18,7 +20,7 @@ const router = createRouter({
   routes,
 });
 
-const whiteList = ['/external', '/public']
+const whiteList = ['/external', '/public', '/faucet']
 
 
 // Route guard: check if user is logged in
