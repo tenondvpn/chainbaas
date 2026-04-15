@@ -26,7 +26,7 @@
                         <el-text class="mx-1" type="info">Preset GAS</el-text>
                     </el-col>
                     <el-col :span="15" style="padding: 0px;">
-                        <el-input-number v-model="gas_prepayment" :step="1000000" />
+                        <el-input-number v-model="gas_prefund" :step="1000000" />
                     </el-col>
                 </el-row>
             </el-form-item>
@@ -108,7 +108,7 @@ const currentColumn = ref(1)
 const compileResult = ref(null)
 const editorContainer = ref(null)
 const editorElement = ref(null)
-const preivateKey = ref('ff9f7083546b97ef0cafd6930c954d0b73bcb53de25400df2658c6c61cdfbadf')
+const preivateKey = ref('71e571862c0e4aefa87a3c16057a62c8331991a11746ab7ff8c6b6418e73b2f6')
 var editorView = ref()
 const constructor = ref(null)
 const otherFunctions = ref([])
@@ -117,7 +117,7 @@ const formLabelWidth = '140px'
 const not_constructer = ref(false)
 const dialogTitle = ref('Enter Constructor Parameters')
 const contractAddress = ref('')
-const gas_prepayment = ref(0)
+const gas_prefund = ref(0)
 const transfer_amount = ref(0)
 const run_loading = ref(false)
 const abiJson = ref(null)
@@ -616,7 +616,7 @@ function deploySolidity() {
                     'function_types': types.join(','),
                     'function_args': values.join(','),
                     'amount': transfer_amount.value,
-                    'gas_prepayment': gas_prepayment.value,
+                    'gas_prefund': gas_prefund.value,
                 }))
                 .then(response => {
                     emitter.emit('deploy_solidity_code_res', response.data);

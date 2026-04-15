@@ -6,7 +6,7 @@
         
             <el-popover :visible="gas_visible" placement="top" :width="220" style="margin-top: 5px;float: right;">
                 <p>Preset GAS</p>
-                <el-input-number v-model="gas_prepayment" :step="1000000" />
+                <el-input-number v-model="gas_prefund" :step="1000000" />
                 <div style="text-align: right; margin-top: 20px">
                     <el-button size="small" text @click="gas_visible = false">Cancel</el-button>
                     <el-button size="small" type="primary" :loading="gas_waiting"  @click="CallGasPrepayment">
@@ -62,11 +62,11 @@ import qs from 'qs';
 const textarea = ref('')
 const contract_address = ref('')
 const visible = ref(false)
-const privateKey = ref('ff9f7083546b97ef0cafd6930c954d0b73bcb53de25400df2658c6c61cdfbadf')
+const privateKey = ref('71e571862c0e4aefa87a3c16057a62c8331991a11746ab7ff8c6b6418e73b2f6')
 const test_url = ref('http://192.168.56.136:7001')
 const logArea = ref(null);
 const gas_visible = ref(false)
-const gas_prepayment = ref(1000000)
+const gas_prefund = ref(1000000)
 const gas_waiting = ref(false)
 
 const toCompile = () => {
@@ -103,8 +103,8 @@ const toSetPrivateKey = () => {
 
 const CallGasPrepayment = () => {
     gas_waiting.value = true
-    axios.post('/pipeline/set_gas_prepayment/', qs.stringify({
-        "gas_prepayment": gas_prepayment.value,
+    axios.post('/pipeline/set_gas_prefund/', qs.stringify({
+        "gas_prefund": gas_prefund.value,
         "private_key": privateKey.value,
         "address": contract_address.value,
     })).then((response) => {
