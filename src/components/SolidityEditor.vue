@@ -303,7 +303,7 @@ const update_graph = (data) => {
                 if (response.data.status != 0) {
                     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
                 } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": base64ToHexLower(response.data.data.addr)});
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.data.address});
                 }
             })
             .catch(error => {
