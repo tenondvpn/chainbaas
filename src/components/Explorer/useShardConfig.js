@@ -2,9 +2,12 @@ import { ref, watch } from 'vue'
 
 const STORAGE_KEY = 'shardora_explorer_shards'
 
-const defaultShards = () => [
-  { id: 1, networkId: 0, name: 'Local Node', url: '' }
-]
+// Runtime shards injected by explorer-config.js (set per deployment environment)
+const defaultShards = () => {
+  const injected = typeof window !== 'undefined' && window.__EXPLORER_SHARDS__
+  if (Array.isArray(injected) && injected.length) return injected
+  return [{ id: 1, networkId: 0, name: 'Local Node', url: '' }]
+}
 
 // Module-level singleton — all components share the same reactive list
 const shards = ref(
