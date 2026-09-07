@@ -10,6 +10,9 @@
         <el-tooltip class="box-item" content="Get test tokens from the faucet!">
             <el-menu-item index="6" @click="toFaucet">Faucet</el-menu-item>
         </el-tooltip>
+        <el-tooltip class="box-item" content="Browse blocks, transactions and addresses on-chain!">
+            <el-menu-item index="7" @click="toExplorer">Block Explorer</el-menu-item>
+        </el-tooltip>
         <el-menu-item index="5" style="margin-top:0px" class="no-underline">
             <el-tooltip class="box-item" content="Switch background color!">
                 <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left: -12px;float:right;"
@@ -135,6 +138,10 @@ const toFaucet = () => {
     router.push('/faucet');
 }
 
+const toExplorer = () => {
+    router.push('/explorer');
+}
+
 const handleLogout = async () => {
     localStorage.removeItem('user-token');
     delete axios.defaults.headers.common['Authorization'];
@@ -173,6 +180,8 @@ const emitterOn = () => {
             activeIndex.value = '2'
         } else if (path.indexOf('/processor') >= 0) {
             activeIndex.value = '3'
+        } else if (path.indexOf('/explorer') >= 0) {
+            activeIndex.value = '7'
         } else {
             activeIndex.value = '5'
         }
