@@ -2,226 +2,93 @@
     <el-menu :default-active="activeIndex" mode="horizontal" style="height: 44px;" :ellipsis="false"
         @select="handleSelect">
         <el-menu-item index="0">
-            <h3>SethChain-Baas</h3>
+            <h3>ShardoraChain</h3>
         </el-menu-item>
-        <el-tooltip class="box-item" content="Solidity smart contract editing and management!">
-            <el-menu-item v-if="show_solidty" index="5" @click="toSolidty">Smart Contract</el-menu-item>
+        <el-tooltip content="Blockchain explorer — search accounts and transactions">
+            <el-menu-item index="1" @click="toExplorer">Explorer</el-menu-item>
         </el-tooltip>
-        <el-tooltip class="box-item" content="Get test tokens from the faucet!">
-            <el-menu-item index="6" @click="toFaucet">Faucet</el-menu-item>
+        <el-tooltip content="Get test tokens from the faucet">
+            <el-menu-item index="2" @click="toFaucet">Faucet</el-menu-item>
         </el-tooltip>
-        <el-tooltip class="box-item" content="Browse blocks, transactions and addresses on-chain!">
-            <el-menu-item index="7" @click="toExplorer">Block Explorer</el-menu-item>
+        <el-tooltip content="Solidity smart contract IDE">
+            <el-menu-item index="3" @click="toSolidity">Smart Contract</el-menu-item>
         </el-tooltip>
-        <el-menu-item index="5" style="margin-top:0px" class="no-underline">
-            <el-tooltip class="box-item" content="Switch background color!">
-                <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left: -12px;float:right;"
+        <el-menu-item index="9" style="margin-top:0px" class="no-underline">
+            <el-tooltip content="Switch background color">
+                <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left:-12px;float:right;"
                     size="default" @change="toggleDark" />
             </el-tooltip>
-            <el-tooltip class="box-item" content="Switch theme!">
-                <el-color-picker size="small" style="margin-top:20px;margin-left: -19px;float:right;"
+            <el-tooltip content="Switch theme color">
+                <el-color-picker size="small" style="margin-top:20px;margin-left:-19px;float:right;"
                     v-model="themeColor" show-alpha :predefine="predefineColors" @change="logColor" />
             </el-tooltip>
         </el-menu-item>
-        <el-dropdown trigger="click" @command="handleCommand">
-            <div class="user-menu-trigger">
-                <el-avatar :size="27" :src="circleUrl" style="margin-top: 7px;" />
-            </div>
-            <template #dropdown>
-                <el-dropdown-menu>
-                    <!-- <el-dropdown-item command="settings">Change Password</el-dropdown-item> -->
-                    <el-dropdown-item v-if="show_menu" divided command="logout">Logout</el-dropdown-item>
-                </el-dropdown-menu>
-            </template>
-        </el-dropdown>
     </el-menu>
-    <router-view  ></router-view>
+    <router-view />
 </template>
-<script lang="ts">
-export default {
-}
 
+<script lang="ts">
+export default {}
 </script>
 
 <script lang="ts" setup>
-import { onMounted, ref, watch, onBeforeUnmount } from 'vue'
-import { reactive, toRefs } from 'vue'
-import { Sunny, Moon } from "@element-plus/icons-vue";
-import { useDark, useToggle } from "@vueuse/core";
-import axios from 'axios';
-import { useRouter } from 'vue-router';
-import { ElConfigProvider } from 'element-plus';
-import zhCn from 'element-plus/es/locale/lang/zh-cn';
-import { ElMessage } from 'element-plus';
-import emitter from './components/EventBus';
-import { ElNotification } from 'element-plus';
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { useDark, useToggle } from '@vueuse/core'
+import { useRouter } from 'vue-router'
+import emitter from './components/EventBus'
 
-const show_menu = ref(true)
-const show_solidty = ref(true)
 const checked1 = ref(true)
-// Get or set default theme color from localStorage
-const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF');
+const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF')
 
-// Watch for themeColor changes
-watch(themeColor, (newColor) => {
-    // Dynamically modify Element UI's --el-color-primary variable
-    document.documentElement.style.setProperty('--el-color-primary', newColor);
-    // Also modify other related color variables
-    document.documentElement.style.setProperty('--el-color-primary-light-3', newColor);
-    document.documentElement.style.setProperty('--el-color-primary-light-5', newColor);
-    document.documentElement.style.setProperty('--el-color-primary-light-7', newColor);
-    document.documentElement.style.setProperty('--el-color-primary-light-8', newColor);
-    document.documentElement.style.setProperty('--el-color-primary-light-9', newColor);
-});
-
-onMounted(() => {
-    emitterOn();
-    const token = localStorage.getItem('access_token');
-    if (token) {
-        show_menu.value = true
-    }
-
-});
-
-onBeforeUnmount(() => {
-    emitterOff();
+watch(themeColor, (val) => {
+    document.documentElement.style.setProperty('--el-color-primary', val)
+    ;['light-3','light-5','light-7','light-8','light-9'].forEach(s => {
+        document.documentElement.style.setProperty(`--el-color-primary-${s}`, val)
+    })
 })
+document.documentElement.style.setProperty('--el-color-primary', themeColor.value)
 
-// Save color to localStorage
-const saveTheme = () => {
-    localStorage.setItem('themeColor', themeColor.value);
-};
-
-function logColor(val) {
-    console.log('Color updated:', val)
-    // When document.documentElement is a global variable
-    const el = document.documentElement
-    // const el = document.getElementById('xxx')
-
-    // Get CSS variable
-    getComputedStyle(el).getPropertyValue(`--el-color-primary`)
-
-    // Set CSS variable
-    el.style.setProperty('--el-color-primary', val)
-    themeColor.value = val;
-    saveTheme()
+function logColor(val: string) {
+    document.documentElement.style.setProperty('--el-color-primary', val)
+    themeColor.value = val
+    localStorage.setItem('themeColor', val)
 }
 
-// Apply saved color on page load
-document.documentElement.style.setProperty('--el-color-primary', themeColor.value);
-
-const router = useRouter();
-
-const handleCommand = async (command) => {
-    if (command === 'settings') {
-    } else if (command === 'logout') {
-        try {
-            const response = await axios.post('/rest_logout/', {
-            });
-
-            localStorage.setItem('access_token', '')
-            axios.defaults.headers.common['Authorization'] = ''; // Set default request header
-            ElMessage.success('Logged out successfully');
-            show_menu.value = true
-            router.push('/login'); // Redirect to home page after successful login
-        } catch (error) {
-            ElNotification({ title: "Error", message: "Logout failed: " + error, type: "danger", position: 'top-left', })
-        }
-    }
-};
-
-const toSolidty = () => {
-    router.push('/solidity');
-}
-
-const toFaucet = () => {
-    router.push('/faucet');
-}
-
-const toExplorer = () => {
-    router.push('/explorer');
-}
-
-const handleLogout = async () => {
-    localStorage.removeItem('user-token');
-    delete axios.defaults.headers.common['Authorization'];
-    router.push('/login');
-    console.log("logout success.")
-
-
-};
-
-
-const isDark = useDark();
-
-const tmp_toggleDark = useToggle(isDark);
-const toggleDark = () => {
-    tmp_toggleDark()
-    emitter.emit("theme_changed", {})
-}
-
+const router = useRouter()
 const activeIndex = ref('1')
-const handleSelect = (key: string, keyPath: string[]) => {
-    console.log(key, keyPath)
+
+function toExplorer() { router.push('/explorer') }
+function toFaucet() { router.push('/faucet') }
+function toSolidity() { router.push('/solidity') }
+
+const handleSelect = (key: string) => { activeIndex.value = key }
+
+const isDark = useDark()
+const tmp_toggleDark = useToggle(isDark)
+function toggleDark() {
+    tmp_toggleDark()
+    emitter.emit('theme_changed', {})
 }
 
-const emitterOn = () => {
-    emitter.on("show_menu", (show) => {
-        show_menu.value = show
-        console.log("show_menu: ", show_menu.value)
-    })
-
-    emitter.on('change_el_menu_item', (path) => {
-        if (path.indexOf('/dashboard') >= 0) {
-            activeIndex.value = '4'
-        } else if (path.indexOf('/pipeline') >= 0) {
-            activeIndex.value = '1'
-        } else if (path.indexOf('/runing') >= 0) {
-            activeIndex.value = '2'
-        } else if (path.indexOf('/processor') >= 0) {
-            activeIndex.value = '3'
-        } else if (path.indexOf('/explorer') >= 0) {
-            activeIndex.value = '7'
-        } else {
-            activeIndex.value = '5'
-        }
+function emitterOn() {
+    emitter.on('change_el_menu_item', (path: string) => {
+        if (path.includes('/explorer')) activeIndex.value = '1'
+        else if (path.includes('/faucet')) activeIndex.value = '2'
+        else if (path.includes('/solidity')) activeIndex.value = '3'
     })
 }
 
-const emitterOff = () => {
-    emitter.off("show_menu", null)
-    emitter.off("change_el_menu_item", null)
+function emitterOff() {
+    emitter.off('change_el_menu_item', null)
 }
 
-const state = reactive({
-    circleUrl:
-        'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-    squareUrl:
-        'https://cube.elemecdn.com/9/c2/f0ee8a3c7c9638a54940382568c9dpng.png',
-    sizeList: ['small', '', 'large'] as const,
-})
+onMounted(emitterOn)
+onBeforeUnmount(emitterOff)
 
-const { circleUrl, squareUrl, sizeList } = toRefs(state)
-
-
-const color = ref('rgba(255, 69, 0, 0.68)')
 const predefineColors = ref([
-    '#5F95FF',
-    '#ff8c00',
-    '#ffd700',
-    '#90ee90',
-    '#00ced1',
-    '#1e90ff',
-    '#c71585',
-    'rgba(255, 69, 0, 0.68)',
-    'rgb(255, 120, 0)',
-    'hsv(51, 100, 98)',
-    'hsva(120, 40, 94, 0.5)',
-    'hsl(181, 100%, 37%)',
-    'hsla(209, 100%, 56%, 0.73)',
-    '#c7158577',
+    '#5F95FF','#ff8c00','#ffd700','#90ee90','#00ced1','#1e90ff','#c71585',
+    'rgba(255, 69, 0, 0.68)','rgb(255, 120, 0)',
 ])
-
 </script>
 
 <style scoped>
@@ -229,56 +96,13 @@ const predefineColors = ref([
     margin-right: auto;
 }
 
-.demo-basic {
-    text-align: center;
-}
-
-.demo-basic .sub-title {
-    margin-bottom: 10px;
-    font-size: 14px;
-    color: var(--el-text-color-secondary);
-}
-
-.demo-basic .demo-basic--circle,
-.demo-basic .demo-basic--square {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.demo-basic .block:not(:last-child) {
-    border-right: 1px solid var(--el-border-color);
-}
-
-.demo-basic .block {
-    flex: 1;
-}
-
-.demo-basic .el-col:not(:last-child) {
-    border-right: 1px solid var(--el-border-color);
-}
-
-@media screen and (max-width: 992px) {
-    .demo-basic .el-col:not(:last-child) {
-        border-right: none;
-    }
-}
-
-
 .no-underline.is-active {
     border-bottom: 0px !important;
 }
 </style>
 
 <style>
-.el-color-picker__trigger {
-    border: 0px;
-}
-
-/* .el-color-picker__color-inner {
-    background-color: var(--el-color-info)!important;
-} */
-
+.el-color-picker__trigger { border: 0px; }
 .el-color-picker .el-color-picker__icon {
     align-items: center;
     color: #ffffff;

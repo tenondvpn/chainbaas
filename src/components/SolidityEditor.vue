@@ -88,6 +88,7 @@ import axios from 'axios'
 import qs from 'qs'
 import { ElMessage } from 'element-plus'
 import { useDark } from "@vueuse/core";
+import { deployContractDirect } from '../services/shardora'
 import { Prec } from '@codemirror/state';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -607,43 +608,49 @@ function deploySolidity() {
                 }
             }
 
-            axios
-                .post('/pipeline/deploy_solidity/', qs.stringify({
-                    'bytecode': response.data.bytecode,
-                    'private_key': preivateKey.value,
-                    'code_type': 0,
-                    'to': contractAddress.value,
-                    'function_types': types.join(','),
-                    'function_args': values.join(','),
-                    'amount': transfer_amount.value,
-                    'gas_prefund': gas_prefund.value,
-                }))
-                .then(response => {
-                    emitter.emit('deploy_solidity_code_res', response.data);
-                    dialogFormVisible.value = false
-                    if (response.data.status != 0) {
-                        ElMessage({
-                            type: 'error',
-                            message: 'Contract deployment failed: ' + response.data.msg,
-                        })
-                        return;
-                    }
-
-                    ElMessage({
-                        type: 'success',
-                        message: 'Contract deployment successful, contract address: ' + response.data.id,
-                    })
-                    contractAddress.value = response.data.id;
-                    prev_save_graph_tm_ms = 0;
-                    prev_saved_code.value = "";
-                    TimeToSaveGraph();
-                })
-                .catch(error => {
+            // Deploy directly to blockchain node with source code embedded
+            deployContractDirect({
+                privateKeyHex: preivateKey.value,
+                shardId: 3,
+                bytecode: response.data.bytecode,
+                abiJson: response.data.abi,
+                sourceCode: codeValue.value,
+                constructorTypes: types,
+                constructorArgs: values,
+                amount: transfer_amount.value,
+                prepay: gas_prefund.value,
+            }).then(result => {
+                dialogFormVisible.value = false
+                run_loading.value = false
+                if (!result.ok) {
+                    emitter.emit('deploy_solidity_code_res', { status: 1, id: '', msg: result.msg })
                     ElMessage({
                         type: 'error',
-                        message: 'Contract deployment failed: ' + error,
+                        message: 'Contract deployment failed: ' + result.msg,
                     })
+                    return
+                }
+                const addr = result.contractAddress ?? ''
+                emitter.emit('deploy_solidity_code_res', { status: 0, id: addr })
+                ElMessage({
+                    type: 'success',
+                    message: addr
+                        ? 'Contract deployment successful, contract address: ' + addr
+                        : 'Contract deployment tx submitted. Check the contract list in Explorer.',
                 })
+                if (addr) {
+                    contractAddress.value = addr
+                    prev_save_graph_tm_ms = 0
+                    prev_saved_code.value = ''
+                    TimeToSaveGraph()
+                }
+            }).catch(error => {
+                run_loading.value = false
+                ElMessage({
+                    type: 'error',
+                    message: 'Contract deployment failed: ' + error,
+                })
+            })
         })
         .catch(error => {
             run_loading.value = false

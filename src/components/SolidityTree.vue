@@ -30,43 +30,15 @@
                         <div v-if="node.data.is_project">
                             <span class="node-buttons">
                                 <el-button-group class="ml-4">
-                                    <el-tooltip class="box-item" effect="dark" content="Click to create a new folder!">
-                                        <el-button plain type="info" size="small" :icon="Folder"
-                                            @click="callCreateProject(node)" />
-                                    </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="Click to create a new contract!">
+                                    <el-tooltip class="box-item" effect="dark" content="新建合约">
                                         <el-button plain type="success" size="small" :icon="Plus"
-                                            @click="addPipelineClicked(node)" />
-                                    </el-tooltip>
-                                    <el-tooltip v-if="node.label != 'My Contracts'" class="box-item" effect="dark"
-                                        content="Edit category">
-                                        <el-button plain type="primary" size="small" :icon="Edit"
-                                            @click="callUpdateProject(node)" />
-                                    </el-tooltip>
-                                    <el-tooltip v-if="node.label != 'My Contracts'" class="box-item" effect="dark"
-                                        content="Delete category">
-                                        <el-button plain type="warning" size="small" :icon="Delete"
-                                            @click="deleteProject(node)" />
+                                            @click.stop="addPipelineClicked(node)" />
                                     </el-tooltip>
                                 </el-button-group>
                             </span>
                         </div>
                         <div v-else>
                             <span class="node-buttons">
-                                <el-button-group class="ml-4">
-                                    <el-tooltip class="box-item" effect="dark" content="Click to edit contract information!">
-                                        <el-button plain type="primary" @click="addPipelineClicked(node)" size="small"
-                                            :icon="Edit" />
-                                    </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="Click to delete contract!">
-                                        <el-button plain type="warning" size="small" :icon="Delete"
-                                            @click="clickDeletePipeline(node)" />
-                                    </el-tooltip>
-                                    <el-tooltip class="box-item" effect="dark" content="Click to copy contract">
-                                        <el-button plain type="primary" @click="copyPipelineClicked(node)" size="small"
-                                            :icon="CopyDocument" />
-                                    </el-tooltip>
-                                </el-button-group>
                             </span>
                         </div>
                     </div>
@@ -75,32 +47,6 @@
         </div>
     </div>
 
-    <el-drawer v-model="createSolidity" :direction="drawer_direction" size="50%" :destroy-on-close="true">
-        <template #header>
-            <h4>{{ openPipelineModelTitle }}</h4>
-        </template>
-        <template #default>
-            <CreateSolidity :pipeline_info="selectedPipeline" />
-        </template>
-    </el-drawer>
-
-    <el-drawer v-model="createProject" :direction="drawer_direction" size="50%" :destroy-on-close="true">
-        <template #header>
-            <h4>Create Project Folder</h4>
-        </template>
-        <template #default>
-            <CreateFolder :current_folder_info="selectedProject" />
-        </template>
-    </el-drawer>
-
-    <el-drawer v-model="updateProject" :direction="drawer_direction" size="50%" :destroy-on-close="true">
-        <template #header>
-            <h4>Update Project Folder</h4>
-        </template>
-        <template #default>
-            <UpdateFolder :current_folder_info="selectedProject" />
-        </template>
-    </el-drawer>
 
     <el-dialog
         v-model="centerDialogVisible"
@@ -147,6 +93,7 @@ import UpdateFolder from './UpdateFolder.vue'
 import { ElMessageBox } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useEventListener } from '@vueuse/core'
+import { explorerGetContracts, explorerGetContract } from '../services/shardora'
 
 const createSolidity = ref(false)
 const drawer_direction = ref<DrawerProps['direction']>('rtl')
@@ -194,11 +141,13 @@ const treeData = ref([
 const labelPosition = ref<FormProps['labelPosition']>('top')
 const isDark = useDark();
 const pipelineNameToCopy = ref("")
+const chainContractMap = new Map<string, any>()
 
 const emitterOn = () => {
 
 emitter.on("success_create_pipeline", (payload) => {
-    appendNode(payload["pid"], payload)
+    // Reload chain contracts to pick up newly deployed contract
+    GetProjectsAndPipelines()
     createSolidity.value = false;
 });
 
@@ -290,10 +239,8 @@ emitter.on("success_update_pipeline", (payload) => {
     createSolidity.value = false;
 });
 
-emitter.on('home_view_click_create_pipeline', (payload) => {
-    selectedPipeline.value = structuredClone(selectedPipelineValue)
-    selectedPipeline.value.project_id = payload
-    createSolidity.value = true;
+emitter.on('home_view_click_create_pipeline', (_payload) => {
+    addPipelineClicked(null)
 });
 
 emitter.on("graph_call_delete_pipeline", (key) => {
@@ -308,31 +255,8 @@ emitter.on('show_graph_called', (data) => {
 })
 
 emitter.on('click_show_pipeline', (key) => {
-    openPipelineModelTitle.value = "Update Contract"
-    axios
-        .post('/pipeline/get_pipeline_detail/', qs.stringify({
-            'pipe_id': key.split("-")[1],
-        }))
-        .then(response => {
-            selectedPipeline.value = response.data
-            if (response.data.email_to != "") {
-                selectedPipeline.value.monitor_way |= 1
-            }
-
-            if (response.data.sms_to != "") {
-                selectedPipeline.value.monitor_way |= 2
-            }
-
-            const str_id = "" + key;
-
-            console.log(str_id, key, str_id.split("-").length)
-            project_id.value = str_id
-            createSolidity.value = true;
-        })
-        .catch(error => {
-            console.log(error)
-            emitter.emit('update_graph', "-1");
-        })
+    // For chain contracts, key is the node id (e.g. "contract-0xabc...")
+    handleNodeClick({ id: key }, null)
 })
 }
 
@@ -515,73 +439,20 @@ const callCreateProject = (node) => {
 }
 
 const handleNodeExpand = (nodeData, nodeInstance) => {
-    axios
-        .get('/pipeline/get_project_tree_async/', {
-            params: {
-                "id": nodeData.id,
-                "type": 4
-            }
-        })
-        .then(response => {
-            var parentNode = findNode(nodeData.id, data.value)
-            if (parentNode) {
-                parentNode.children = []
-            }
-
-            // var json_obj = JSON.parse(response)
-            for (const item of response.data) {
-                appendNode(nodeData.id, item);
-            }
-
-        })
-        .catch(error => console.log(error))
+    // Chain nodes are loaded eagerly; nothing to lazy-load
+    const str_id = "" + nodeData.id
+    if (str_id === 'chain-root' || str_id.startsWith('contract-')) return
 }
 
 const addPipelineClicked = (nodeData) => {
-    openPipelineModelTitle.value = "Create Contract"
-    selectedPipeline.value = structuredClone(selectedPipelineValue);
-    console.log("ttttt:", nodeData.key)
-    var str_key = "" + nodeData.key
-    if (str_key.split("-").length != 2) {
-        selectedPipeline.value.project_id = nodeData.key
-        createSolidity.value = true;
-        project_path.value = nodeData.label
-        var parent_node = nodeData.parent
-        while (parent_node) {
-            project_path.value = parent_node.label + "/" + project_path.value
-            parent_node = parent_node.parent
-        }
-
-        console.log(project_path.value)
-        return;
-    }
-
-    openPipelineModelTitle.value = "Update Contract"
-    axios
-        .post('/pipeline/get_pipeline_detail/', qs.stringify({
-            'pipe_id': nodeData.key.split("-")[1],
-        }))
-        .then(response => {
-            selectedPipeline.value = response.data
-            if (response.data.email_to != "") {
-                selectedPipeline.value.monitor_way |= 1
-            }
-
-            if (response.data.sms_to != "") {
-                selectedPipeline.value.monitor_way |= 2
-            }
-
-            createSolidity.value = true;
-            const str_id = "" + nodeData.key;
-
-            console.log(str_id, nodeData, str_id.split("-").length)
-            project_id.value = str_id
-        })
-        .catch(error => {
-            console.log(error)
-            emitter.emit('update_graph', "-1");
-        })
-
+    // Open blank editor for a new contract (deploy goes directly to chain)
+    emitter.emit('update_graph', {
+        tag: '0',
+        project_id: 'chain-root',
+        project_path: '/链上合约',
+        data: { is_project: 0, pipe_id: 0, pipe_usr_graph: '' },
+    })
+    emitter.emit('show_update_graph', { tag: '1', project_path: '/链上合约', pipe_id: '' })
 }
 
 const handleDelete = (node) => {
@@ -661,104 +532,70 @@ const clickDeletePipeline = (nodeData) => {
     })
 }
 
-const handleNodeClick = (nodeData, nodeInstance) => {
+const handleNodeClick = async (nodeData, nodeInstance) => {
     const str_id = "" + nodeData.id;
-    selectedPipeline.value = structuredClone(selectedPipelineValue)
-    console.log(str_id, str_id.split("-")[1], str_id.split("-").length)
     project_id.value = str_id
-    if (str_id.split("-").length != 2) {
-        project_path.value = "/" + nodeData.label
-        var parent_node = nodeInstance.parent
-        while (parent_node) {
-            project_path.value = "/" + parent_node.label + project_path.value
-            parent_node = parent_node.parent
-        }
 
-        emitter.emit('update_graph', { "tag": "-1", "project_path": project_path.value, 'project_id': ""+ nodeData.id });
-        emitter.emit('show_update_graph', { "tag": "-1", "project_path": project_path.value, 'project_id': ""+nodeData.id });
-        console.log('update_graph node click 0', project_path.value, 'project_id', nodeData.id)
-        return;
+    // Root folder node
+    if (str_id === 'chain-root') {
+        project_path.value = '/链上合约'
+        emitter.emit('update_graph', { tag: '-1', project_path: project_path.value, project_id: str_id })
+        emitter.emit('show_update_graph', { tag: '-1', project_path: project_path.value, project_id: str_id })
+        return
     }
 
-    axios
-        .post('/pipeline/get_pipeline_detail/', qs.stringify({
-            'pipe_id': nodeData.id.split("-")[1],
-        }))
-        .then(response => {
-            selectedPipeline.value = response.data
-            if (response.data.email_to != "") {
-                selectedPipeline.value.monitor_way |= 1
-            }
-
-            if (response.data.sms_to != "") {
-                selectedPipeline.value.monitor_way |= 2
-            }
-
-            console.log('get pipeline detail:', response.data)
-            console.log("11111:", str_id, str_id.split("-")[1], str_id.split("-").length)
-            pipeline_detail.value = response.data
-            projectToCopy.value = pipeline_detail.value.project_id
-            var pipline_data = response.data
-            axios
-                .post('/pipeline/get_tasks/', qs.stringify({
-                    'pipeline_id': str_id.split("-")[1],
-                }))
-                .then(response => {
-                    // Correct: payload type matches definition
-                    emitter.emit('show_update_graph', { "tag": "1", "project_path": project_path.value, "pipe_id": str_id });
-                    response.data['project_id'] = str_id.split("-")[0]
-                    response.data['pipeline_detail'] = pipline_data
-                    emitter.emit('update_graph', { "tag": "0", 'project_id': str_id.split("-")[0], "project_path": project_path.value, "data": response.data });
-                    console.log('update_graph get tasks 1', project_path.value, response.data, 'project_id', str_id.split("-")[0])
-                })
-                .catch(error => {
-                    console.log(error)
-                    emitter.emit('update_graph', { "tag": "-1", 'project_id': str_id.split("-")[0], "project_path": project_path.value });
-                    emitter.emit('show_update_graph', { "tag": "-1", "project_path": project_path.value, 'project_id': str_id.split("-")[0] });
-                    console.log('update_graph get tasks error 2', project_path.value, 'project_id', str_id.split("-")[0])
-                })
+    // Chain contract leaf node
+    if (str_id.startsWith('contract-')) {
+        let contract = chainContractMap.get(str_id)
+        // Fetch full detail if source_code not yet loaded
+        if (contract && !contract._detail_loaded) {
+            try {
+                const detail = await explorerGetContract(3, contract.addr)
+                if (detail) {
+                    Object.assign(contract, detail)
+                    contract._detail_loaded = true
+                }
+            } catch (e) { /* use cached data */ }
+        }
+        if (!contract) return
+        const graphPayload = JSON.stringify({
+            code: contract.source_code ?? '',
+            address: contract.addr ?? '',
+            abi: contract.abi ?? '[]',
         })
-        .catch(error => {
-            console.log(error)
-            emitter.emit('update_graph', "-1");
+        emitter.emit('show_update_graph', { tag: '1', project_path: '/链上合约', pipe_id: str_id })
+        emitter.emit('update_graph', {
+            tag: '0',
+            project_id: 'chain-root',
+            project_path: '/链上合约',
+            data: { is_project: 0, pipe_id: 0, pipe_usr_graph: graphPayload },
         })
+        return
+    }
 }
 
 const GetProjectsAndPipelines = async () => {
-    // axios.interceptors.request.use(config => {
-    //     const token = localStorage.getItem('access_token')
-    //     if (token) {
-    //         config.headers.Authorization = `Bearer ${token}`
-    //     }
-    //     return config
-    // })
-    await axios
-        .get('/pipeline/get_project_tree_async/', {
-            params: {
-                "type": 4
-            }
-        })
-        .then(response => {
-            console.log("0 get_project_tree_async:", response)
-            // var json_obj = JSON.parse(response)
-            for (const item of response.data) {
-                if (item.text == "我的合约") {
-                    item.text = "My Contracts"
-                }
+    chainContractMap.clear()
+    const rootId = 'chain-root'
+    appendNode(-1, { id: rootId, text: '链上合约', is_project: true, pipe_id: 0 })
 
-                appendNode(-1, item);
-                if (item.is_project && projectToCopy.value == -1) {
-                    projectToCopy.value = item.id
-                }
-            }
+    try {
+        const resp = await explorerGetContracts(3, { limit: 100 })
+        const items: any[] = resp?.items ?? resp?.data?.items ?? []
+        for (const contract of items) {
+            const addr: string = contract.addr ?? ''
+            const nodeId = `contract-${addr}`
+            const shortAddr = addr.length > 16
+                ? addr.slice(0, 8) + '...' + addr.slice(-4)
+                : (addr || '(未知)')
+            chainContractMap.set(nodeId, contract)
+            appendNode(rootId, { id: nodeId, text: shortAddr, is_project: false, pipe_id: 0 })
+        }
+    } catch (e) {
+        console.error('Failed to load chain contracts:', e)
+    }
 
-            console.log('treeRef.value.getNode():', projectToCopy.value, treeRef.value.getNode(projectToCopy.value))
-            handleNodeExpand({ "id": projectToCopy.value }, null)
-
-        })
-        .catch(error => console.log(error))
-
-        treeRef.value.expandNode(treeRef.value.getNode(projectToCopy.value))
+    treeRef.value?.expandNode(treeRef.value.getNode(rootId))
 }
 
 useEventListener(window, 'resize', () => {
