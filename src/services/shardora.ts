@@ -3,6 +3,51 @@
 import axios from 'axios'
 import qs from 'qs'
 import { buildAndSignTx, getKeypair, type SignTxInput } from './signing'
+import { keccak256 } from 'ethereum-cryptography/keccak'
+
+// Ethereum CREATE address formula: keccak256(RLP([sender, nonce]))[-20:]
+// Matches Shardora's GetContractAddress(sender, nonce).
+export function calcCreateAddress(senderHex: string, nonce: number): string {
+    const senderBytes = hexToBytes(senderHex.replace(/^0x/, '').slice(-40).padStart(40, '0'))
+
+    function rlpBytes(b: Uint8Array): Uint8Array {
+        if (b.length === 0) return new Uint8Array([0x80])
+        if (b.length === 1 && b[0] < 0x80) return b
+        if (b.length <= 55) return concat([new Uint8Array([0x80 + b.length]), b])
+        const lenBe = numToMinBytes(b.length)
+        return concat([new Uint8Array([0xb7 + lenBe.length]), lenBe, b])
+    }
+    function rlpList(payload: Uint8Array): Uint8Array {
+        if (payload.length <= 55) return concat([new Uint8Array([0xc0 + payload.length]), payload])
+        const lenBe = numToMinBytes(payload.length)
+        return concat([new Uint8Array([0xf7 + lenBe.length]), lenBe, payload])
+    }
+    function numToMinBytes(n: number): Uint8Array {
+        if (n === 0) return new Uint8Array([])
+        const bytes: number[] = []
+        let x = n
+        while (x > 0) { bytes.unshift(x & 0xff); x = x >>> 8 }
+        return new Uint8Array(bytes)
+    }
+    function concat(parts: Uint8Array[]): Uint8Array {
+        const total = parts.reduce((s, p) => s + p.length, 0)
+        const out = new Uint8Array(total)
+        let off = 0
+        for (const p of parts) { out.set(p, off); off += p.length }
+        return out
+    }
+    function hexToBytes(hex: string): Uint8Array {
+        const arr = new Uint8Array(hex.length / 2)
+        for (let i = 0; i < arr.length; i++) arr[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16)
+        return arr
+    }
+
+    const nonceBytes = nonce === 0 ? new Uint8Array([]) : numToMinBytes(nonce)
+    const payload = concat([rlpBytes(senderBytes), rlpBytes(nonceBytes)])
+    const rlp = rlpList(payload)
+    const hash = keccak256(rlp)
+    return Array.from(hash.slice(-20)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 // Shard IDs on the network (2-6, i.e. 5 shards × 4 nodes each)
 export const SHARDS = [2, 3, 4, 5, 6]
@@ -175,12 +220,13 @@ export async function queryAccountTxsOnShard(
 // Transaction receipt
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function queryTxReceipt(txHash: string, shardId = DEFAULT_SHARD): Promise<any | null> {
+// Pass shardId=null to search all shards; pass a specific shard number to query only that shard.
+export async function queryTxReceipt(txHash: string, shardId: number | null = null): Promise<any | null> {
     const hex = txHash.toLowerCase().replace(/^0x/, '')
-    for (const shard of shardId === DEFAULT_SHARD ? SHARDS : [shardId]) {
+    for (const shard of shardId === null ? SHARDS : [shardId]) {
         try {
             const data = await post(shard, 'transaction_receipt', { tx_hash: hex })
-            if (data && (data.status === 0 || data.receipt)) return { ...data, shard }
+            if (data && data.status !== undefined) return { ...data, shard }
         } catch (_) {}
     }
     return null
@@ -201,23 +247,39 @@ export interface TransferOpts {
     prepay?: number
     key?: string
     val?: string
+    nonce?: number  // optional: skip nonce query and use this value directly
 }
 
-export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: string; raw?: any }> {
+export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: string; txHash?: string; raw?: any }> {
     const shardId = opts.shardId ?? DEFAULT_SHARD
     const keypair = getKeypair(opts.privateKeyHex)
     const fromAddr = keypair.accountId
 
-    // 1. Get current nonce from the node
-    const accInfo = await queryAccountOnShard(fromAddr, shardId)
-    if (!accInfo) {
-        // Account might not exist yet — try all shards
-        const accAll = await queryAccount(fromAddr)
-        if (!accAll) {
-            return { ok: false, msg: `账户 ${fromAddr} 未找到，余额为0` }
+    let nonce: number
+    if (opts.nonce !== undefined) {
+        nonce = opts.nonce
+    } else {
+        // kContractExcute (step 8): nonce belongs to the prefund account (contract||user, 40 bytes).
+        // All other steps: nonce belongs to the sender's own account.
+        let nonceAddr: string
+        if (opts.step === 8 && opts.to) {
+            const contractHex = opts.to.toLowerCase().replace(/^0x/, '').slice(-40).padStart(40, '0')
+            const userHex    = fromAddr.toLowerCase().replace(/^0x/, '').slice(-40).padStart(40, '0')
+            nonceAddr = contractHex + userHex   // 80 hex chars = 40-byte prefund address
+        } else {
+            nonceAddr = fromAddr
         }
+
+        const accInfo = await queryAccountOnShard(nonceAddr, shardId)
+        if (!accInfo && opts.step !== 8) {
+            // For non-contract-execute txs, account must exist
+            const accAll = await queryAccount(fromAddr)
+            if (!accAll) {
+                return { ok: false, msg: `账户 ${fromAddr} 未找到，余额为0` }
+            }
+        }
+        nonce = accInfo ? parseInt(accInfo.nonce) + 1 : 1
     }
-    const nonce = accInfo ? parseInt(accInfo.nonce) + 1 : 1
 
     const signInput: SignTxInput = {
         privateKeyHex: opts.privateKeyHex,
@@ -237,7 +299,7 @@ export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: 
 
     try {
         const raw = await post(shardId, 'transaction', txParams)
-        return { ok: true, msg: 'ok', raw }
+        return { ok: true, msg: 'ok', txHash: txParams.txHash, raw }
     } catch (e: any) {
         return { ok: false, msg: String(e?.message ?? e) }
     }
@@ -619,15 +681,14 @@ export interface DeployContractOpts {
 
 export async function deployContractDirect(
     opts: DeployContractOpts
-): Promise<{ ok: boolean; msg: string; contractAddress?: string; raw?: any }> {
-    // Encode source code + ABI as JSON payload in contract_input
-    const srcPayload = JSON.stringify({
-        __type: 'SHRDORA_CONTRACT_SRC',
-        source: opts.sourceCode,
-        abi: opts.abiJson,
-    })
-    const inputHex = Array.from(new TextEncoder().encode(srcPayload))
-        .map(b => b.toString(16).padStart(2, '0')).join('')
+): Promise<{ ok: boolean; msg: string; contractAddress?: string; fromAddr?: string; txHash?: string; raw?: any }> {
+    const shardId = opts.shardId ?? DEFAULT_SHARD
+    const fromAddr = getKeypair(opts.privateKeyHex).accountId
+
+    // Query nonce before submission so we can compute the deterministic contract address
+    const accInfo = await queryAccountOnShard(fromAddr, shardId)
+    const deployNonce = accInfo ? parseInt(accInfo.nonce) + 1 : 1
+    const contractAddress = calcCreateAddress(fromAddr, deployNonce)
 
     // Build initCode = bytecode + ABI-encoded constructor args (standard EVM convention)
     let initCode = opts.bytecode.replace(/^0x/, '')
@@ -644,35 +705,270 @@ export async function deployContractDirect(
 
     const result = await transfer({
         privateKeyHex: opts.privateKeyHex,
-        to: '',
+        to: contractAddress,
         amount: opts.amount ?? 0,
-        shardId: opts.shardId,
+        shardId,
         step: 6,
         contractBytes: initCode,
-        input: inputHex,
+        // Do NOT send input here — the node interprets non-empty contract_input as a
+        // post-deploy call using the bytes as calldata, which would revert the tx.
+        // Source code and ABI are saved separately via updateContract after polling confirms success.
         prepay: opts.prepay ?? 0,
+        nonce: deployNonce,
     })
 
     if (!result.ok) return result
+    return { ok: true, msg: 'submitted', contractAddress, fromAddr, txHash: result.txHash, raw: result.raw }
+}
 
-    // Poll for the new contract address (block processing takes a few seconds)
-    const { getKeypair } = await import('./signing')
-    const fromAddr = getKeypair(opts.privateKeyHex).accountId
-    const deadline = Date.now() + 15000
-    while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 1500))
+// Two-phase deployment confirmation:
+// Phase 1 — poll transaction_receipt by txHash until the tx is committed (success or failure).
+// Phase 2 — query contract address on-chain to confirm account exists.
+// Status codes: 0=success, 10003=pending, 5031=revert, other 5xxx=failure.
+export async function pollForDeployedContract(
+    shardId: number,
+    contractAddr: string,
+    txHash: string,
+    timeoutMs: number,
+    onCheck: (attempt: number, elapsedSec: number, phase: string) => void,
+): Promise<{ found: boolean; addr: string; failReason?: string }> {
+    const start = Date.now()
+    let attempt = 0
+
+    // Phase 1: wait for tx receipt to confirm the transaction committed successfully
+    while (Date.now() - start < timeoutMs) {
+        await new Promise(r => setTimeout(r, 2000))
+        attempt++
+        const elapsed = Math.round((Date.now() - start) / 1000)
+        onCheck(attempt, elapsed, 'tx')
         try {
-            const resp = await explorerGetContracts(opts.shardId, { limit: 10 })
-            const items: any[] = resp?.items ?? resp?.data?.items ?? []
-            const found = items.find((c: any) => {
-                const creator = (c.creator_addr ?? '').replace(/^0x/, '').toLowerCase()
-                return creator === fromAddr.toLowerCase()
-            })
-            if (found) {
-                return { ok: true, msg: 'ok', contractAddress: found.addr, raw: result.raw }
+            const receipt = await queryTxReceipt(txHash, shardId)
+            if (receipt) {
+                const s = typeof receipt.status === 'number' ? receipt.status : parseInt(receipt.status ?? '-1')
+                if (s === 0) {
+                    // kConsensusSuccess — tx committed, proceed to phase 2
+                    break
+                }
+                if (s === 10003 || s === 100010) {
+                    // pending / not found yet — keep polling
+                    continue
+                }
+                // Any other status (5031 revert, other 5xxx errors) is a definitive failure
+                return { found: false, addr: '', failReason: `tx failed: ${receipt.msg ?? s}` }
+            }
+        } catch (_) {}
+        if (Date.now() - start >= timeoutMs) break
+    }
+
+    const elapsed0 = Math.round((Date.now() - start) / 1000)
+    if (elapsed0 >= timeoutMs / 1000) {
+        return { found: false, addr: '', failReason: 'timeout waiting for tx receipt' }
+    }
+
+    // Phase 2: confirm contract address is live on-chain
+    for (let i = 0; i < 5; i++) {
+        onCheck(attempt + i, Math.round((Date.now() - start) / 1000), 'confirm')
+        try {
+            const info = await queryAccountOnShard(contractAddr, shardId)
+            if (info) return { found: true, addr: contractAddr }
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 2000))
+    }
+    // Tx succeeded but address not yet queryable — still return success with address
+    return { found: true, addr: contractAddr }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contract management — new node-backed endpoints
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Browser-side Solidity compiler via Web Worker ────────────────────────────
+// Worker handles WebAssembly compilation (no 8 MB main-thread limit in workers)
+
+let _solcWorker: Worker | null = null
+const _pendingCompiles = new Map<number, {
+    resolve: (v: { status: number; abi: string; bytecode: string; msg?: string }) => void
+    reject: (e: Error) => void
+}>()
+let _reqId = 0
+
+function getSolcWorker(): Worker {
+    if (_solcWorker) return _solcWorker
+    _solcWorker = new Worker(
+        new URL('../workers/solc.worker.ts', import.meta.url),
+        // classic worker (no type:'module') so importScripts is available inside
+    )
+    _solcWorker.onmessage = (e: MessageEvent) => {
+        const { id, ...result } = e.data
+        const pending = _pendingCompiles.get(id)
+        if (!pending) return
+        _pendingCompiles.delete(id)
+        pending.resolve(result)
+    }
+    _solcWorker.onerror = (e: ErrorEvent) => {
+        for (const { reject } of _pendingCompiles.values())
+            reject(new Error(e.message ?? 'Solidity compiler worker crashed'))
+        _pendingCompiles.clear()
+        _solcWorker = null
+    }
+    return _solcWorker
+}
+
+// Compile Solidity source code in a Web Worker (avoids main-thread WASM limit).
+// Returns { status: 0, abi: string, bytecode: string } on success.
+export async function compileSolidity(
+    _shardId: number,
+    sourceCode: string,
+): Promise<{ status: number; abi: string; bytecode: string; msg?: string }> {
+    try {
+        const worker = getSolcWorker()
+        const id = ++_reqId
+        const result = await new Promise<{ status: number; abi: string; bytecode: string; msg?: string }>(
+            (resolve, reject) => {
+                _pendingCompiles.set(id, { resolve, reject })
+                worker.postMessage({ id, sourceCode })
+            },
+        )
+        return result
+    } catch (e: any) {
+        return { status: 1, abi: '', bytecode: '', msg: String(e?.message ?? e) }
+    }
+}
+
+// Call a view (read-only) contract function via /abi_query_contract.
+// inputHex: ABI-encoded function call as a hex string (no 0x prefix).
+// fromHex:  caller address hex (optional, uses zero address if omitted).
+// Returns raw hex output from the EVM.
+export async function abiQueryContract(
+    shardId: number,
+    contractAddr: string,
+    inputHex: string,
+    fromHex = '0000000000000000000000000000000000000000',
+): Promise<{ ok: boolean; outputHex: string; msg?: string }> {
+    try {
+        const addr = contractAddr.toLowerCase().replace(/^0x/, '')
+        const from = fromHex.toLowerCase().replace(/^0x/, '')
+        const resp = await post<any>(shardId, 'abi_query_contract', {
+            address: addr,
+            input: inputHex,
+            from,
+        })
+        // Node returns plain hex text on success, or JSON error
+        if (typeof resp === 'string' && !resp.startsWith('{')) {
+            return { ok: true, outputHex: resp }
+        }
+        if (resp?.status === 0 || resp?.code === 0) {
+            return { ok: true, outputHex: resp.output ?? resp.data ?? '' }
+        }
+        return { ok: false, outputHex: '', msg: resp?.msg ?? String(resp) }
+    } catch (e: any) {
+        return { ok: false, outputHex: '', msg: String(e?.message ?? e) }
+    }
+}
+
+// Call a state-changing contract function (submit transaction, step=8).
+export interface CallContractOpts {
+    privateKeyHex: string
+    shardId: number
+    contractAddr: string
+    inputHex: string   // ABI-encoded function call, no 0x prefix
+    amount?: number
+    prepay?: number
+}
+
+export async function callContractWrite(
+    opts: CallContractOpts,
+): Promise<{ ok: boolean; msg: string; txHash?: string; raw?: any }> {
+    return transfer({
+        privateKeyHex: opts.privateKeyHex,
+        to: opts.contractAddr.toLowerCase().replace(/^0x/, ''),
+        amount: opts.amount ?? 0,
+        shardId: opts.shardId,
+        step: 8,   // kContractExcute
+        input: opts.inputHex,
+        prepay: opts.prepay ?? 0,
+    })
+}
+
+// Poll transaction receipt until committed or timeout.
+// Status codes: 0=success, 10003=pending, anything else=failure.
+export async function pollTxResult(
+    shardId: number,
+    txHash: string,
+    timeoutMs: number,
+    onProgress: (attempt: number, elapsedSec: number) => void,
+): Promise<{ ok: boolean; reason?: string }> {
+    const start = Date.now()
+    let attempt = 0
+    while (Date.now() - start < timeoutMs) {
+        await new Promise(r => setTimeout(r, 2000))
+        attempt++
+        const elapsed = Math.round((Date.now() - start) / 1000)
+        onProgress(attempt, elapsed)
+        try {
+            const receipt = await queryTxReceipt(txHash, shardId)
+            if (receipt) {
+                const s = typeof receipt.status === 'number' ? receipt.status : parseInt(receipt.status ?? '-1')
+                if (s === 0) return { ok: true }
+                if (s === 10003 || s === 100010) continue  // pending / not found yet
+                return { ok: false, reason: receipt.msg ?? `status ${s}` }
             }
         } catch (_) {}
     }
+    return { ok: false, reason: 'timeout' }
+}
 
-    return { ok: true, msg: 'ok', contractAddress: '', raw: result.raw }
+// Set gas prefund for a contract (step=7, kContractGasPrefund).
+export async function setGasPrefund(
+    privateKeyHex: string,
+    shardId: number,
+    contractAddr: string,
+    amount: number,
+): Promise<{ ok: boolean; msg: string }> {
+    return transfer({
+        privateKeyHex,
+        to: contractAddr.toLowerCase().replace(/^0x/, ''),
+        amount,
+        shardId,
+        step: 7,   // kContractGasPrefund
+        prepay: amount,
+    })
+}
+
+// Update contract metadata in the explorer DB.
+export async function updateContract(
+    shardId: number,
+    addr: string,
+    sourceCode: string,
+    abi: string,
+    bytecode: string,
+): Promise<{ ok: boolean; msg: string }> {
+    try {
+        const data = await post<any>(shardId, 'explorer/contract/update', {
+            addr: addr.toLowerCase().replace(/^0x/, ''),
+            source_code: sourceCode,
+            abi,
+            bytecode,
+        })
+        if (data?.code === 0) return { ok: true, msg: 'ok' }
+        return { ok: false, msg: data?.msg ?? 'update failed' }
+    } catch (e: any) {
+        return { ok: false, msg: String(e?.message ?? e) }
+    }
+}
+
+// Delete contract from the explorer DB.
+export async function deleteContractFromExplorer(
+    shardId: number,
+    addr: string,
+): Promise<{ ok: boolean; msg: string }> {
+    try {
+        const data = await post<any>(shardId, 'explorer/contract/delete', {
+            addr: addr.toLowerCase().replace(/^0x/, ''),
+        })
+        if (data?.code === 0) return { ok: true, msg: 'ok' }
+        return { ok: false, msg: data?.msg ?? 'delete failed' }
+    } catch (e: any) {
+        return { ok: false, msg: String(e?.message ?? e) }
+    }
 }

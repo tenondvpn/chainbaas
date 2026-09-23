@@ -91,7 +91,7 @@ export function buildAndSignTx(opts: SignTxInput): TxParams {
     const keypair = getKeypair(opts.privateKeyHex)
     const nonce = BigInt(opts.nonce)
     const amount = BigInt(opts.amount)
-    const gasLimit = BigInt(opts.gasLimit ?? 999999)
+    const gasLimit = BigInt(opts.gasLimit ?? 99999999)
     const gasPrice = BigInt(opts.gasPrice ?? 1)
     const step = BigInt(opts.step ?? 0)
     const prepay = BigInt(opts.prepay ?? 0)
@@ -156,6 +156,5 @@ export function buildAndSignTx(opts: SignTxInput): TxParams {
     if (opts.val !== undefined) params.val = opts.val
     if (opts.contractBytes) params.bytes_code = opts.contractBytes
     if (opts.input) params.input = opts.input
-
-    return params
+    return { ...params, txHash: bytesToHex(msgHash) }
 }

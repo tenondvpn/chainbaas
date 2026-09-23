@@ -84,11 +84,18 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { solidity } from '@replit/codemirror-lang-solidity';
 import { lineNumbers } from "@codemirror/view";
 import emitter from './EventBus'
-import axios from 'axios'
-import qs from 'qs'
 import { ElMessage } from 'element-plus'
 import { useDark } from "@vueuse/core";
-import { deployContractDirect } from '../services/shardora'
+import {
+    deployContractDirect,
+    pollForDeployedContract,
+    pollTxResult,
+    compileSolidity,
+    abiQueryContract,
+    callContractWrite,
+    explorerGetContract,
+    updateContract,
+} from '../services/shardora'
 import { Prec } from '@codemirror/state';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -109,7 +116,7 @@ const currentColumn = ref(1)
 const compileResult = ref(null)
 const editorContainer = ref(null)
 const editorElement = ref(null)
-const preivateKey = ref('71e571862c0e4aefa87a3c16057a62c8331991a11746ab7ff8c6b6418e73b2f6')
+const preivateKey = ref(localStorage.getItem('solidity_private_key') ?? '')
 var editorView = ref()
 const constructor = ref(null)
 const otherFunctions = ref([])
@@ -118,7 +125,7 @@ const formLabelWidth = '140px'
 const not_constructer = ref(false)
 const dialogTitle = ref('Enter Constructor Parameters')
 const contractAddress = ref('')
-const gas_prefund = ref(0)
+const gas_prefund = ref(99999999)
 const transfer_amount = ref(0)
 const run_loading = ref(false)
 const abiJson = ref(null)
@@ -165,24 +172,17 @@ emitter.on('set_solidity_private_key', (key: string) => {
 });
 
 emitter.on('compile_solidity_code', (code: string) => {
-    // run_loading.value = false
-    axios
-        .post('/pipeline/compile_solidity/', qs.stringify({
-            'source_code': codeValue.value,
-        }))
-        .then(response => {
-            emitter.emit('compile_solidity_code_res', response.data);
-            if (response.data.status != 0) {
-                console.log("Compilation error:", response.data.msg);
-                return;
-            }
-
-            console.log(response.data.abi)
-            console.log(response.data.bytecode)
-        })
-        .catch(error => {
-            console.log(error)
-        })
+    compileSolidity(3, codeValue.value).then(response => {
+        emitter.emit('compile_solidity_code_res', response);
+        if (response.status != 0) {
+            console.log("Compilation error:", response.msg);
+        } else {
+            console.log(response.abi)
+            console.log(response.bytecode)
+        }
+    }).catch(error => {
+        console.log(error)
+    })
 });
 
 emitter.on('deploy_solidity_code', (code: string) => {
@@ -282,6 +282,7 @@ const base64ToHexLower = (base64Str) => {
 
 const update_graph = (data) => {
     contractAddress.value = '';
+    currentDraftName.value = ''
     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": ""});
     if (data["data"]["is_project"] == 1) {
         return
@@ -296,22 +297,14 @@ const update_graph = (data) => {
             contractAddress.value = obj["address"]
             abiJson.value = JSON.parse(obj["abi"])
             console.log("test get abi: ", obj["abi"])
-            axios.post('/pipeline/get_contract_info/', qs.stringify({
-                'address': obj["address"]
-            }))
-            .then(response => {
-                console.log("get contract: ", response.data.data)
-                if (response.data.status != 0) {
-                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": response.data.msg});
+            explorerGetContract(3, obj["address"]).then(detail => {
+                if (detail) {
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": detail.addr ?? obj["address"]});
                 } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": response.data.data.address});
+                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "contract not found on chain"});
                 }
-            })
-            .catch(error => {
-                ElMessage({
-                    type: 'error',
-                    message: 'get contract failed: ' + error,
-                })
+            }).catch(error => {
+                ElMessage({ type: 'error', message: 'get contract failed: ' + error })
                 emitter.emit('deploy_solidity_code_res', {"status": 1, "id": 'get contract failed: ' + error});
             })
         } else {
@@ -441,7 +434,27 @@ function hexToUtf8(hex) {
     return decodeURIComponent(escape(str));
 }
 
-function callFunction() {
+// Normalize a user-supplied string to a value compatible with web3 ABI encoding.
+function normalizeAbiValue(type: string, value: string): any {
+    if (type === 'bool') {
+        return value === 'true' || value === '1'
+    }
+    // bytes / bytesN: must be 0x-prefixed hex; convert plain strings automatically
+    if (type === 'bytes' || /^bytes\d+$/.test(type)) {
+        if (!value.startsWith('0x')) {
+            const encoded = new TextEncoder().encode(value)
+            return '0x' + Array.from(encoded).map(b => b.toString(16).padStart(2, '0')).join('')
+        }
+        return value
+    }
+    // uint[]/int[]/address[]/bytes[]: split comma-separated input into array
+    if (/\[\]$/.test(type)) {
+        return value.split(',').map(s => s.trim())
+    }
+    return value
+}
+
+async function callFunction() {
     var types = []
     var values = []
     for (let arg of form.args) {
@@ -456,6 +469,23 @@ function callFunction() {
         }
         types.push(arg.type)
         values.push(arg.value)
+    }
+
+    // If ABI not loaded, compile source code in memory to get it
+    if (!abiJson.value || abiJson.value.length === 0) {
+        try {
+            const compileResult = await compileSolidity(3, codeValue.value)
+            if (compileResult.status !== 0) {
+                ElMessage({ type: 'error', message: 'Cannot get ABI (compile failed): ' + compileResult.msg })
+                run_loading.value = false
+                return
+            }
+            abiJson.value = JSON.parse(compileResult.abi)
+        } catch (e) {
+            ElMessage({ type: 'error', message: 'Cannot get ABI: ' + e })
+            run_loading.value = false
+            return
+        }
     }
 
     var abiFunction = abiJson.value.find((item) => item.type === 'function' && item.name === form.function);
@@ -477,84 +507,113 @@ function callFunction() {
 
     const selectedFunction = otherFunctions.value.find(func => func.name === form.function);
     if (selectedFunction.stateMutability == "view") {
-        axios
-            .post('/pipeline/query_function_solidity/', qs.stringify({
-                'address': contractAddress.value,
-                'function_name': form.function,
-                'function_types': types.join(','),
-                'function_args': values.join(','),
-                'private_key': preivateKey.value,
-            }))
-            .then(response => {
+        // ABI-encode the function call via web3
+        import('web3').then(({ Web3 }) => {
+            const w3 = new Web3()
+            const funcAbi = abiJson.value.find(i => i.type === 'function' && i.name === form.function)
+            let inputHex = ''
+            try {
+                const processedValues = funcAbi.inputs.map((inp, i) => normalizeAbiValue(inp.type, values[i]))
+                inputHex = w3.eth.abi.encodeFunctionCall(funcAbi, processedValues).replace(/^0x/, '')
+            } catch(e) {
                 run_loading.value = false
-                emitter.emit('call_function_solidity_code_res', response.data);
-                if (response.data.status != 0) {
-                    ElMessage({
-                        type: 'error',
-                        message: 'Function call failed: ' + response.data.msg,
-                    })
-                    return;
-                }
-
-                var res_data = response.data.return_value;
-                try {
-                    res_data = decodeOutput(abiJson.value, form.function,  response.data.return_value);
-                    console.log("Decoded output:", res_data, abiJson.value, form.function,  response.data.return_value);
-                    // Output: Function name() return value: test
-                } catch (err) {
-                    console.error("Parsing failed:", err.message);
-                }
-
-                ElMessage({
-                    type: 'success',
-                    message: 'Function call successful, return value: ' + res_data,
+                ElMessage({ type: 'error', message: 'ABI encode failed: ' + e })
+                return
+            }
+            abiQueryContract(3, contractAddress.value, inputHex, preivateKey.value ? undefined : undefined)
+                .then(result => {
+                    run_loading.value = false
+                    if (!result.ok) {
+                        emitter.emit('call_function_solidity_code_res', { status: 1, funcName: form.function, msg: result.msg })
+                        ElMessage({ type: 'error', message: 'Function call failed: ' + result.msg })
+                        return
+                    }
+                    let res_data = result.outputHex
+                    try {
+                        const decoded = w3.eth.abi.decodeParameters(funcAbi.outputs, '0x' + result.outputHex)
+                        if (funcAbi.outputs.length === 1) {
+                            res_data = String(decoded[0])
+                        } else {
+                            res_data = JSON.stringify(
+                                Object.fromEntries(funcAbi.outputs.map((o, i) => [o.name || `arg${i}`, decoded[i]])),
+                                (k, v) => typeof v === 'bigint' ? v.toString() : v,
+                                2
+                            )
+                        }
+                    } catch (err) {
+                        console.error("ABI decode failed:", err.message)
+                    }
+                    emitter.emit('call_function_solidity_code_res', { status: 0, funcName: form.function, return_value: res_data })
+                    ElMessage({ type: 'success', message: 'Function call successful' })
+                    dialogFormVisible.value = false
                 })
-                dialogFormVisible.value = false
-            })
-            .catch(error => {
-                run_loading.value = false
-                ElMessage({
-                    type: 'error',
-                    message: 'Function call failed: ' + error,
+                .catch(error => {
+                    run_loading.value = false
+                    ElMessage({ type: 'error', message: 'Function call failed: ' + error })
                 })
-            })
+        })
     } else {
-        axios
-            .post('/pipeline/call_function_solidity/', qs.stringify({
-                'address': contractAddress.value,
-                'function_name': form.function,
-                'function_types': types.join(','),
-                'function_args': values.join(','),
-                'private_key': preivateKey.value,
-                'amount': transfer_amount.value,
-            }))
-            .then(response => {
+        // ABI-encode and submit as a write transaction
+        import('web3').then(({ Web3 }) => {
+            const w3 = new Web3()
+            const funcAbi = abiJson.value.find(i => i.type === 'function' && i.name === form.function)
+            let inputHex = ''
+            try {
+                const processedValues = funcAbi.inputs.map((inp, i) => normalizeAbiValue(inp.type, values[i]))
+                inputHex = w3.eth.abi.encodeFunctionCall(funcAbi, processedValues).replace(/^0x/, '')
+            } catch(e) {
                 run_loading.value = false
-                emitter.emit('call_function_solidity_code_res', response.data);
-                if (response.data.status != 0) {
-                    ElMessage({
-                        type: 'error',
-                        message: 'Function call failed: ' + response.data.msg,
-                    })
-                    return;
+                ElMessage({ type: 'error', message: 'ABI encode failed: ' + e })
+                return
+            }
+            callContractWrite({
+                privateKeyHex: preivateKey.value,
+                shardId: 3,
+                contractAddr: contractAddress.value,
+                inputHex,
+                amount: transfer_amount.value,
+            }).then(result => {
+                run_loading.value = false
+                if (!result.ok) {
+                    emitter.emit('call_function_solidity_code_res', { status: 1, funcName: form.function, msg: result.msg })
+                    ElMessage({ type: 'error', message: 'Function call failed: ' + result.msg })
+                    return
                 }
-
-                ElMessage({
-                    type: 'success',
-                    message: 'Function call successful, return value: ' + response.data.return_value,
-                })
+                const txHash = result.txHash ?? ''
                 dialogFormVisible.value = false
-            })
-            .catch(error => {
-                run_loading.value = false
-                ElMessage({
-                    type: 'error',
-                    message: 'Function call failed: ' + error,
+                emitter.emit('call_function_solidity_code_res', {
+                    status: 2,
+                    funcName: form.function,
+                    txHash,
+                    msg: `Submitted\nTxHash: ${txHash}`,
                 })
+                // Poll receipt to confirm actual on-chain result
+                const funcName = form.function
+                pollTxResult(3, txHash, 60000, (attempt, elapsed) => {
+                    emitter.emit('deploy_progress', `[${elapsed}s] ${funcName}: waiting for confirmation (attempt ${attempt})`)
+                }).then(pollResult => {
+                    emitter.emit('call_function_solidity_code_res', {
+                        status: pollResult.ok ? 0 : 1,
+                        funcName,
+                        txHash,
+                        msg: pollResult.ok
+                            ? `Transaction confirmed!\nTxHash: ${txHash}`
+                            : `Transaction failed: ${pollResult.reason}\nTxHash: ${txHash}`,
+                    })
+                    if (pollResult.ok) {
+                        ElMessage({ type: 'success', message: `${funcName}: transaction confirmed` })
+                    } else {
+                        ElMessage({ type: 'error', message: `${funcName}: transaction failed — ${pollResult.reason}` })
+                    }
+                })
+            }).catch(error => {
+                run_loading.value = false
+                ElMessage({ type: 'error', message: 'Function call failed: ' + error })
             })
+        })
     }
 
-    
+
 }
 
 function deploySolidity() {
@@ -575,22 +634,19 @@ function deploySolidity() {
         values.push(arg.value)
     }
 
-    axios
-        .post('/pipeline/compile_solidity/', qs.stringify({
-            'source_code': codeValue.value,
-        }))
-        .then(response => {
-            emitter.emit('compile_solidity_code_res', response.data);
-            if (response.data.status != 0) {
+    compileSolidity(3, codeValue.value)
+        .then(data => {
+            emitter.emit('compile_solidity_code_res', data);
+            if (data.status != 0) {
                 ElMessage({
                     type: 'error',
-                    message: 'Contract deployment failed, compilation error: ' + response.data.msg,
+                    message: 'Contract deployment failed, compilation error: ' + data.msg,
                 })
                 run_loading.value = false
                 return;
             }
 
-            abiJson.value = JSON.parse(response.data.abi);
+            abiJson.value = JSON.parse(data.abi);
             var abiConstructor = abiJson.value.find((item) => item.type === 'constructor');
             if (abiConstructor) {
                 if (abiConstructor.inputs.length != types.length) {
@@ -601,7 +657,7 @@ function deploySolidity() {
                     run_loading.value = false
                     return;
                 }
-                
+
                 types = []
                 for (let input of abiConstructor.inputs) {
                     types.push(input.type);
@@ -612,37 +668,58 @@ function deploySolidity() {
             deployContractDirect({
                 privateKeyHex: preivateKey.value,
                 shardId: 3,
-                bytecode: response.data.bytecode,
-                abiJson: response.data.abi,
+                bytecode: data.bytecode,
+                abiJson: data.abi,
                 sourceCode: codeValue.value,
                 constructorTypes: types,
                 constructorArgs: values,
                 amount: transfer_amount.value,
                 prepay: gas_prefund.value,
-            }).then(result => {
+            }).then(async result => {
                 dialogFormVisible.value = false
                 run_loading.value = false
                 if (!result.ok) {
                     emitter.emit('deploy_solidity_code_res', { status: 1, id: '', msg: result.msg })
-                    ElMessage({
-                        type: 'error',
-                        message: 'Contract deployment failed: ' + result.msg,
-                    })
+                    ElMessage({ type: 'error', message: 'Contract deployment failed: ' + result.msg })
                     return
                 }
-                const addr = result.contractAddress ?? ''
-                emitter.emit('deploy_solidity_code_res', { status: 0, id: addr })
-                ElMessage({
-                    type: 'success',
-                    message: addr
-                        ? 'Contract deployment successful, contract address: ' + addr
-                        : 'Contract deployment tx submitted. Check the contract list in Explorer.',
+
+                // Tx submitted — start 120s polling with live status updates
+                const computedAddr = result.contractAddress ?? ''
+                const txHash = result.txHash ?? ''
+                emitter.emit('deploy_progress', '[0s] Deployment tx submitted.')
+                if (txHash) emitter.emit('deploy_progress', `     TxHash: 0x${txHash}`)
+                if (computedAddr) emitter.emit('deploy_progress', `     Expected address: 0x${computedAddr}`)
+                ElMessage({ type: 'info', message: 'Deployment tx submitted, checking...' })
+
+                const polled = await pollForDeployedContract(3, computedAddr, txHash, 120000, (attempt, elapsed, phase) => {
+                    if (phase === 'tx') {
+                        emitter.emit('deploy_progress', `[${elapsed}s] Waiting for tx confirmation... (attempt ${attempt})`)
+                    } else {
+                        emitter.emit('deploy_progress', `[${elapsed}s] Tx confirmed! Verifying contract address...`)
+                    }
                 })
-                if (addr) {
+
+                if (polled.found) {
+                    const addr = polled.addr
                     contractAddress.value = addr
+                    emitter.emit('deploy_solidity_code_res', { status: 0, id: addr })
+                    emitter.emit('deploy_progress', `[✓] Contract deployed successfully!\nAddress: ${addr}`)
+                    ElMessage({ type: 'success', message: 'Contract deployed: ' + addr })
+                    // Save source code and ABI to node's SQLite (separate from deploy tx)
+                    const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : '[]'
+                    updateContract(3, addr, codeValue.value, abiStr, '')
+                        .catch(err => console.warn('updateContract after deploy failed:', err))
                     prev_save_graph_tm_ms = 0
                     prev_saved_code.value = ''
                     TimeToSaveGraph()
+                    setTimeout(() => emitter.emit('refresh_contract_list'), 2000)
+                } else if (polled.failReason) {
+                    emitter.emit('deploy_progress', `[✗] Deployment failed: ${polled.failReason}`)
+                    ElMessage({ type: 'error', message: 'Deployment failed: ' + polled.failReason })
+                } else {
+                    emitter.emit('deploy_progress', '[✗] Timeout (120s): contract not confirmed. It may still be processing — refresh the contract list later.')
+                    ElMessage({ type: 'warning', message: 'Deployment timeout. Contract may still be processing.' })
                 }
             }).catch(error => {
                 run_loading.value = false
@@ -1067,24 +1144,34 @@ onMounted(() => {
     
 })
 
+const currentDraftName = ref('')
+
 const TimeToSaveGraph = () => {
     var now_tm_ms = getTimestamp();
     if (prev_saved_code.value != codeValue.value && (prev_save_graph_tm_ms + 10 < now_tm_ms)) {
-        var json_data = {
-            "code": codeValue.value,
-            "address": contractAddress.value,
-            "abi": JSON.stringify(abiJson.value)
-        }
-        axios
-            .post('/pipeline/update_pipline_graph/' + pipeline_id.value + "/", qs.stringify({
-                'graph': JSON.stringify(json_data),
-            }))
-            .then(response => {
-                console.log("save pipeline: %d", pipeline_id.value);
-            })
-            .catch(error => console.log(error))
         prev_save_graph_tm_ms = now_tm_ms;
         prev_saved_code.value = codeValue.value
+        if (contractAddress.value) {
+            const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : ''
+            updateContract(3, contractAddress.value, codeValue.value, abiStr, '')
+                .catch(error => console.log('auto-save contract failed:', error))
+        } else {
+            // No deployed address yet — save as local draft keyed by contract name
+            const name = codeValue.value.match(/\bcontract\s+(\w+)/)?.[1] ?? ''
+            if (name) {
+                const isNew = currentDraftName.value !== name
+                currentDraftName.value = name
+                localStorage.setItem(`solidity_draft_${name}`, JSON.stringify({
+                    name,
+                    code: codeValue.value,
+                    updatedAt: now_tm_ms,
+                }))
+                if (isNew) {
+                    // Only notify tree when a NEW contract name appears
+                    emitter.emit('refresh_draft_list')
+                }
+            }
+        }
     }
 }
 

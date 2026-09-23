@@ -1,7 +1,7 @@
 <template>
     <el-form ref="ruleFormRef" style="max-width: 750px;margin-left: 40px;" :model="ruleForm" :rules="rules" label-width="auto"
         label-position="left">
-        <el-form-item  prop="processor" required>
+        <el-form-item v-if="taskType !== TaskTypes.TYPE_SHELL && taskType !== TaskTypes.TYPE_CLICKHOUSE && taskType !== TaskTypes.TYPE_ODPS"  prop="processor" required>
             <el-col :span="11">
                 <el-form-item prop="processor" label="Select Template Contract" required>
                     <el-tree-select v-model="ruleForm.processor" lazy :load="load" :props="processor_props"

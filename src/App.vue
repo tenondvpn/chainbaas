@@ -13,6 +13,23 @@
         <el-tooltip content="Solidity smart contract IDE">
             <el-menu-item index="3" @click="toSolidity">Smart Contract</el-menu-item>
         </el-tooltip>
+        <el-menu-item index="8" class="no-underline" style="margin-top:0px">
+            <el-popover :visible="pkVisible" placement="bottom" :width="480">
+                <p style="margin:0 0 8px;font-weight:600;">设置私钥 (64位十六进制)</p>
+                <el-input v-model="privateKeyInput" type="password" show-password
+                    placeholder="输入64位十六进制私钥" style="width:100%" />
+                <div style="text-align:right;margin-top:12px;">
+                    <el-button size="small" text @click="pkVisible = false">取消</el-button>
+                    <el-button size="small" type="primary" @click="savePrivateKey">确定</el-button>
+                </div>
+                <template #reference>
+                    <el-button :type="pkSaved ? 'success' : 'warning'" size="small" :icon="KeyIcon"
+                        @click="pkVisible = true" style="margin-top:10px;">
+                        私钥{{ pkSaved ? ' ✓' : '' }}
+                    </el-button>
+                </template>
+            </el-popover>
+        </el-menu-item>
         <el-menu-item index="9" style="margin-top:0px" class="no-underline">
             <el-tooltip content="Switch background color">
                 <el-checkbox fill="#409eff" v-model="checked1" style="margin-top:-15px;margin-left:-12px;float:right;"
@@ -36,9 +53,30 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useDark, useToggle } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import emitter from './components/EventBus'
+import { Key as KeyIcon } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 const checked1 = ref(true)
 const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF')
+
+// Private key
+const pkVisible = ref(false)
+const privateKeyInput = ref(localStorage.getItem('solidity_private_key') ?? '')
+const pkSaved = ref(!!localStorage.getItem('solidity_private_key'))
+
+function savePrivateKey() {
+    const key = privateKeyInput.value.trim().replace(/^0x/, '')
+    if (key.length !== 64 || !/^[0-9a-fA-F]+$/.test(key)) {
+        ElMessage({ type: 'error', message: '私钥必须是64位十六进制字符串' })
+        return
+    }
+    privateKeyInput.value = key
+    localStorage.setItem('solidity_private_key', key)
+    pkSaved.value = true
+    pkVisible.value = false
+    emitter.emit('set_solidity_private_key', { prikey: key })
+    ElMessage({ type: 'success', message: '私钥已保存' })
+}
 
 watch(themeColor, (val) => {
     document.documentElement.style.setProperty('--el-color-primary', val)

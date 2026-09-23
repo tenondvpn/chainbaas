@@ -30,15 +30,25 @@
                         <div v-if="node.data.is_project">
                             <span class="node-buttons">
                                 <el-button-group class="ml-4">
-                                    <el-tooltip class="box-item" effect="dark" content="新建合约">
+                                    <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="新建合约">
                                         <el-button plain type="success" size="small" :icon="Plus"
                                             @click.stop="addPipelineClicked(node)" />
+                                    </el-tooltip>
+                                    <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="刷新列表">
+                                        <el-button plain type="primary" size="small" :icon="Refresh"
+                                            @click.stop="GetProjectsAndPipelines()" />
                                     </el-tooltip>
                                 </el-button-group>
                             </span>
                         </div>
                         <div v-else>
                             <span class="node-buttons">
+                                <el-button-group v-if="('' + node.data.id).startsWith('draft-')" class="ml-4">
+                                    <el-tooltip class="box-item" effect="dark" content="删除草稿">
+                                        <el-button plain type="danger" size="small" :icon="Delete"
+                                            @click.stop="deleteDraft(node.data.id)" />
+                                    </el-tooltip>
+                                </el-button-group>
                             </span>
                         </div>
                     </div>
@@ -78,8 +88,8 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount, h } from 'vue';
-import { Plus, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument } from '@element-plus/icons-vue'
+import { ref, onMounted, onBeforeUnmount, h, nextTick } from 'vue';
+import { Plus, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument, Refresh } from '@element-plus/icons-vue'
 import type { TreeNodeData } from 'element-plus'
 import { useDark } from "@vueuse/core";
 import axios from 'axios';
@@ -93,7 +103,7 @@ import UpdateFolder from './UpdateFolder.vue'
 import { ElMessageBox } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useEventListener } from '@vueuse/core'
-import { explorerGetContracts, explorerGetContract } from '../services/shardora'
+import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer } from '../services/shardora'
 
 const createSolidity = ref(false)
 const drawer_direction = ref<DrawerProps['direction']>('rtl')
@@ -144,6 +154,14 @@ const pipelineNameToCopy = ref("")
 const chainContractMap = new Map<string, any>()
 
 const emitterOn = () => {
+
+emitter.on('refresh_draft_list', () => {
+    loadDraftsFromStorage()
+})
+
+emitter.on('refresh_contract_list', () => {
+    GetProjectsAndPipelines()
+})
 
 emitter.on("success_create_pipeline", (payload) => {
     // Reload chain contracts to pick up newly deployed contract
@@ -261,6 +279,8 @@ emitter.on('click_show_pipeline', (key) => {
 }
 
 const emitterOff = () => {
+    emitter.off('refresh_draft_list', null)
+    emitter.off('refresh_contract_list', null)
     emitter.off("success_create_pipeline", null);
     emitter.off('create_folder', null)
     emitter.off('update_folder', null)
@@ -503,12 +523,15 @@ const clickDeletePipeline = (nodeData) => {
             if (action === 'confirm') {
                 instance.confirmButtonLoading = true
                 instance.confirmButtonText = 'Deleting...'
-                ''
-                axios
-                    .post('/pipeline/delete/' + nodeData.key.split('-')[1] + '/', {
-                    })
-                    .then(response => {
-                        console.log('success delete pipeline.')
+                const contractAddr = ('' + nodeData.key).replace(/^contract-/, '')
+                deleteContractFromExplorer(3, contractAddr)
+                    .then(result => {
+                        if (!result.ok) {
+                            done()
+                            ElMessage({ type: 'danger', message: "Failed to delete contract: " + result.msg })
+                            return
+                        }
+                        console.log('success delete contract.')
                         handleDelete(nodeData)
                         done()
                         instance.confirmButtonLoading = false
@@ -544,6 +567,25 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
         return
     }
 
+    // Local draft node
+    if (str_id.startsWith('draft-')) {
+        const name = str_id.replace(/^draft-/, '')
+        try {
+            const stored = localStorage.getItem(`solidity_draft_${name}`)
+            if (stored) {
+                const draft = JSON.parse(stored)
+                emitter.emit('show_update_graph', { tag: '1', project_path: '/本地草稿', pipe_id: str_id })
+                emitter.emit('update_graph', {
+                    tag: '0',
+                    project_id: 'drafts-root',
+                    project_path: '/本地草稿',
+                    data: { is_project: 0, pipe_id: 0, pipe_usr_graph: JSON.stringify({ code: draft.code, address: '', abi: '[]' }) },
+                })
+            }
+        } catch (e) { console.error('Failed to load draft:', e) }
+        return
+    }
+
     // Chain contract leaf node
     if (str_id.startsWith('contract-')) {
         let contract = chainContractMap.get(str_id)
@@ -576,26 +618,70 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
 
 const GetProjectsAndPipelines = async () => {
     chainContractMap.clear()
+    data.value = []
     const rootId = 'chain-root'
-    appendNode(-1, { id: rootId, text: '链上合约', is_project: true, pipe_id: 0 })
+    appendNode(-1, { id: rootId, text: '链上合约', is_project: true, pipe_id: 0 }, false)
 
     try {
         const resp = await explorerGetContracts(3, { limit: 100 })
-        const items: any[] = resp?.items ?? resp?.data?.items ?? []
+        const items: any[] = Array.isArray(resp?.data) ? resp.data
+            : Array.isArray(resp?.items) ? resp.items
+            : Array.isArray(resp?.data?.items) ? resp.data.items
+            : []
         for (const contract of items) {
             const addr: string = contract.addr ?? ''
             const nodeId = `contract-${addr}`
-            const shortAddr = addr.length > 16
-                ? addr.slice(0, 8) + '...' + addr.slice(-4)
-                : (addr || '(未知)')
+            const srcName = contract.source_code
+                ? (contract.source_code.match(/contract\s+(\w+)/)?.[1] ?? '')
+                : ''
+            const shortAddr = addr.length > 12
+                ? addr.slice(0, 6) + '...' + addr.slice(-4)
+                : (addr || '?')
+            const label = srcName ? `${srcName} (${shortAddr})` : shortAddr
             chainContractMap.set(nodeId, contract)
-            appendNode(rootId, { id: nodeId, text: shortAddr, is_project: false, pipe_id: 0 })
+            appendNode(rootId, { id: nodeId, text: label, is_project: false, pipe_id: 0 }, false)
         }
     } catch (e) {
         console.error('Failed to load chain contracts:', e)
     }
 
     treeRef.value?.expandNode(treeRef.value.getNode(rootId))
+    loadDraftsFromStorage()
+}
+
+const loadDraftsFromStorage = () => {
+    const existingDraftsIdx = data.value.findIndex(n => n.id === 'drafts-root')
+    if (existingDraftsIdx !== -1) data.value.splice(existingDraftsIdx, 1)
+
+    const draftsRootId = 'drafts-root'
+    appendNode(-1, { id: draftsRootId, text: '本地草稿', is_project: true, pipe_id: 0 }, false)
+
+    const draftKeys: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('solidity_draft_')) draftKeys.push(key)
+    }
+    const drafts = draftKeys
+        .map(k => { try { return JSON.parse(localStorage.getItem(k)!) } catch { return null } })
+        .filter(Boolean)
+        .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+
+    for (const draft of drafts) {
+        appendNode(draftsRootId, {
+            id: `draft-${draft.name}`,
+            text: draft.name,
+            is_project: false,
+            pipe_id: 0,
+        }, false)
+    }
+
+    nextTick(() => treeRef.value?.expandNode(treeRef.value.getNode(draftsRootId)))
+}
+
+const deleteDraft = (nodeId: string) => {
+    const name = nodeId.replace(/^draft-/, '')
+    localStorage.removeItem(`solidity_draft_${name}`)
+    loadDraftsFromStorage()
 }
 
 useEventListener(window, 'resize', () => {
@@ -655,19 +741,19 @@ const findNode = (id, nodes) => {
 }
 
 // 新增节点的方法
-const appendNode = (parentId, item) => {
+const appendNode = (parentId, item, autoSelect = true) => {
     if (item == null) {
         return;
     }
 
-    var project_name = item["text"];    
+    var project_name = item["text"];
     if (project_name == "My Project") {
         project_name = "My Contracts"
     }
 
     const newChild = {
         id: item["id"],
-        label: project_name, 
+        label: project_name,
         is_project: item["is_project"],
         children: [],
         valid: true,
@@ -701,11 +787,15 @@ const appendNode = (parentId, item) => {
 
             parentNode.children.push(newChild)
             data.value = [...data.value]
-            treeRef.value.setCurrentKey(newChild.id);
+            if (autoSelect) {
+                treeRef.value.setCurrentKey(newChild.id);
+            }
         }
     }
 
-    emitter.emit('update_graph', { "tag": "0", 'project_id': parentId, "project_path": project_path.value, "data": newChild });
+    if (autoSelect) {
+        emitter.emit('update_graph', { "tag": "0", 'project_id': parentId, "project_path": project_path.value, "data": newChild });
+    }
 }
 
 </script>
