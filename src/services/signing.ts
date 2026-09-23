@@ -54,6 +54,7 @@ export interface TxParams {
     sign_v: number
     bytes_code?: string
     input?: string
+    txHash: string      // keccak256 of signing message, used to poll receipt
 }
 
 export function getKeypair(privateKeyHex: string): Keypair {
@@ -91,7 +92,7 @@ export function buildAndSignTx(opts: SignTxInput): TxParams {
     const keypair = getKeypair(opts.privateKeyHex)
     const nonce = BigInt(opts.nonce)
     const amount = BigInt(opts.amount)
-    const gasLimit = BigInt(opts.gasLimit ?? 99999999)
+    const gasLimit = BigInt(opts.gasLimit ?? 9999999999)
     const gasPrice = BigInt(opts.gasPrice ?? 1)
     const step = BigInt(opts.step ?? 0)
     const prepay = BigInt(opts.prepay ?? 0)

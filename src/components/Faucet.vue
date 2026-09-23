@@ -60,8 +60,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Coin } from '@element-plus/icons-vue'
-import axios from 'axios'
-import qs from 'qs'
+import { faucetSend } from '../services/shardora'
 
 const form = ref({ address: '', amount: 10000000 })
 const loading = ref(false)
@@ -72,18 +71,15 @@ const requestTokens = async () => {
     loading.value = true
     result.value = null
     try {
-        const response = await axios.post('/pipeline/faucet/', qs.stringify({
-            address: form.value.address.trim(),
-            amount: form.value.amount,
-        }))
-        if (response.data.status === 0) {
+        const res = await faucetSend(form.value.address.trim(), form.value.amount)
+        if (res.ok) {
             result.value = {
                 type: 'success',
                 message: 'Tokens sent successfully!',
-                txid: response.data.tx_id ?? response.data.txid ?? '',
+                txid: res.txHash ?? '',
             }
         } else {
-            result.value = { type: 'error', message: 'Failed: ' + (response.data.msg || 'Unknown error') }
+            result.value = { type: 'error', message: 'Failed: ' + res.msg }
         }
     } catch (err) {
         result.value = { type: 'error', message: 'Request failed: ' + err }

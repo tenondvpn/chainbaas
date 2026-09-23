@@ -40,6 +40,16 @@
                     </el-col>
                 </el-row>
             </el-form-item>
+            <el-form-item v-if="not_constructer">
+                <el-row :gutter="37">
+                    <el-col :span="7" style="padding: 0px; width: 200px; padding-left: 18px;">
+                        <el-text class="mx-1" type="info">Gas Limit</el-text>
+                    </el-col>
+                    <el-col :span="15" style="padding: 0px;">
+                        <el-input-number v-model="gas_limit" :step="1000000000" :min="1" />
+                    </el-col>
+                </el-row>
+            </el-form-item>
             <el-form-item style="margin-top: 10px;" v-for="(item, index) in form.args" :key="index"
                 :prop="'items.' + index + '.value'" :rules="{
                     required: false,
@@ -96,6 +106,7 @@ import {
     explorerGetContract,
     updateContract,
 } from '../services/shardora'
+import { getKeypair } from '../services/signing'
 import { Prec } from '@codemirror/state';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -127,6 +138,7 @@ const dialogTitle = ref('Enter Constructor Parameters')
 const contractAddress = ref('')
 const gas_prefund = ref(99999999)
 const transfer_amount = ref(0)
+const gas_limit = ref(9999999999)
 const run_loading = ref(false)
 const abiJson = ref(null)
 const isDark = useDark();
@@ -520,10 +532,17 @@ async function callFunction() {
                 ElMessage({ type: 'error', message: 'ABI encode failed: ' + e })
                 return
             }
+            const contractHexView = contractAddress.value.toLowerCase().replace(/^0x/, '')
+            emitter.emit('deploy_progress',
+                `\n[Call: ${form.function}] View query` +
+                `\n  Contract: ${contractHexView}` +
+                `\n  Input:    ${inputHex.slice(0, 64)}${inputHex.length > 64 ? '...(total ' + Math.floor(inputHex.length / 2) + ' bytes)' : ''}`
+            )
             abiQueryContract(3, contractAddress.value, inputHex, preivateKey.value ? undefined : undefined)
                 .then(result => {
                     run_loading.value = false
                     if (!result.ok) {
+                        emitter.emit('deploy_progress', `\n[✗] ${form.function} failed: ${result.msg}`)
                         emitter.emit('call_function_solidity_code_res', { status: 1, funcName: form.function, msg: result.msg })
                         ElMessage({ type: 'error', message: 'Function call failed: ' + result.msg })
                         return
@@ -566,20 +585,35 @@ async function callFunction() {
                 ElMessage({ type: 'error', message: 'ABI encode failed: ' + e })
                 return
             }
+            const fromAddrWrite = (() => { try { return getKeypair(preivateKey.value).accountId } catch { return '' } })()
+            const contractHexWrite = contractAddress.value.toLowerCase().replace(/^0x/, '')
+            emitter.emit('deploy_progress',
+                `\n[Call: ${form.function}] Tx submitting` +
+                `\n  From:     ${fromAddrWrite}` +
+                `\n  Contract: ${contractHexWrite}` +
+                `\n  Step:     8 (kContractExecute)` +
+                `\n  Amount:   ${transfer_amount.value}` +
+                `\n  GasLimit: ${gas_limit.value}` +
+                `\n  Input:    ${inputHex.slice(0, 64)}${inputHex.length > 64 ? '...(total ' + Math.floor(inputHex.length / 2) + ' bytes)' : ''}`
+            )
             callContractWrite({
                 privateKeyHex: preivateKey.value,
                 shardId: 3,
                 contractAddr: contractAddress.value,
                 inputHex,
                 amount: transfer_amount.value,
+                gasLimit: gas_limit.value,
             }).then(result => {
                 run_loading.value = false
                 if (!result.ok) {
+                    const rawStr = result.raw != null ? '\n  Response: ' + JSON.stringify(result.raw) : ''
+                    emitter.emit('deploy_progress', `\n[✗] ${form.function} failed: ${result.msg}${rawStr}`)
                     emitter.emit('call_function_solidity_code_res', { status: 1, funcName: form.function, msg: result.msg })
                     ElMessage({ type: 'error', message: 'Function call failed: ' + result.msg })
                     return
                 }
                 const txHash = result.txHash ?? ''
+                emitter.emit('deploy_progress', `  TxHash:   ${txHash}`)
                 dialogFormVisible.value = false
                 emitter.emit('call_function_solidity_code_res', {
                     status: 2,
@@ -679,6 +713,8 @@ function deploySolidity() {
                 dialogFormVisible.value = false
                 run_loading.value = false
                 if (!result.ok) {
+                    const rawStr = result.raw != null ? '\n  Response: ' + JSON.stringify(result.raw) : ''
+                    emitter.emit('deploy_progress', `\n[✗] Deploy failed: ${result.msg}${rawStr}`)
                     emitter.emit('deploy_solidity_code_res', { status: 1, id: '', msg: result.msg })
                     ElMessage({ type: 'error', message: 'Contract deployment failed: ' + result.msg })
                     return
@@ -687,9 +723,16 @@ function deploySolidity() {
                 // Tx submitted — start 120s polling with live status updates
                 const computedAddr = result.contractAddress ?? ''
                 const txHash = result.txHash ?? ''
-                emitter.emit('deploy_progress', '[0s] Deployment tx submitted.')
-                if (txHash) emitter.emit('deploy_progress', `     TxHash: 0x${txHash}`)
-                if (computedAddr) emitter.emit('deploy_progress', `     Expected address: 0x${computedAddr}`)
+                const fromAddr = result.fromAddr ?? ''
+                emitter.emit('deploy_progress',
+                    `[Deploy] Tx submitted` +
+                    `\n  From:     ${fromAddr}` +
+                    `\n  Contract: ${computedAddr}` +
+                    `\n  Step:     6 (kContractCreate)` +
+                    `\n  Amount:   ${transfer_amount.value}` +
+                    `\n  Prepay:   ${gas_prefund.value}` +
+                    (txHash ? `\n  TxHash:   ${txHash}` : '')
+                )
                 ElMessage({ type: 'info', message: 'Deployment tx submitted, checking...' })
 
                 const polled = await pollForDeployedContract(3, computedAddr, txHash, 120000, (attempt, elapsed, phase) => {

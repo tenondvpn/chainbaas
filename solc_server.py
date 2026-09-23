@@ -52,8 +52,11 @@ class Handler(BaseHTTPRequestHandler):
             tmp = f.name
 
         try:
+            # --evm-version shanghai: node runs evmone 0.11.0 (Shanghai max); solc 0.8.24+
+            # defaults to cancun which generates opcodes evmone 0.11.0 doesn't support.
             result = subprocess.run(
-                ['solc', '--combined-json', 'abi,bin', '--optimize', tmp],
+                ['solc', '--combined-json', 'abi,bin', '--optimize',
+                 '--evm-version', 'shanghai', tmp],
                 capture_output=True, text=True, timeout=30
             )
         except subprocess.TimeoutExpired:

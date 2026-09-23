@@ -248,6 +248,7 @@ export interface TransferOpts {
     key?: string
     val?: string
     nonce?: number  // optional: skip nonce query and use this value directly
+    gasLimit?: number
 }
 
 export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: string; txHash?: string; raw?: any }> {
@@ -293,15 +294,21 @@ export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: 
         prepay: opts.prepay,
         key: opts.key,
         val: opts.val,
+        gasLimit: opts.gasLimit,
     }
 
     const txParams = buildAndSignTx(signInput)
 
     try {
         const raw = await post(shardId, 'transaction', txParams)
+        // Node returns plain-text: "ok" on success, error string on rejection.
+        if (typeof raw === 'string' && raw.trim() !== 'ok') {
+            return { ok: false, msg: raw.trim(), raw }
+        }
         return { ok: true, msg: 'ok', txHash: txParams.txHash, raw }
     } catch (e: any) {
-        return { ok: false, msg: String(e?.message ?? e) }
+        const raw = e?.response?.data ?? undefined
+        return { ok: false, msg: String(e?.message ?? e), raw }
     }
 }
 
@@ -874,6 +881,7 @@ export interface CallContractOpts {
     inputHex: string   // ABI-encoded function call, no 0x prefix
     amount?: number
     prepay?: number
+    gasLimit?: number
 }
 
 export async function callContractWrite(
@@ -886,7 +894,8 @@ export async function callContractWrite(
         shardId: opts.shardId,
         step: 8,   // kContractExcute
         input: opts.inputHex,
-        prepay: opts.prepay ?? 0,
+        prepay: opts.prepay ?? opts.gasLimit ?? 9999999999,  // prepay drives actual execution gas from prefund
+        gasLimit: opts.gasLimit,
     })
 }
 
@@ -924,7 +933,7 @@ export async function setGasPrefund(
     shardId: number,
     contractAddr: string,
     amount: number,
-): Promise<{ ok: boolean; msg: string }> {
+): Promise<{ ok: boolean; msg: string; txHash?: string }> {
     return transfer({
         privateKeyHex,
         to: contractAddr.toLowerCase().replace(/^0x/, ''),

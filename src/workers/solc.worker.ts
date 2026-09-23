@@ -64,6 +64,9 @@ self.onmessage = async (e: MessageEvent) => {
             language: 'Solidity',
             sources: { 'contract.sol': { content: sourceCode } },
             settings: {
+                // evmVersion must match the node's evmone version (0.11.0 = Shanghai max).
+                // solc 0.8.24+ defaults to cancun which generates opcodes evmone 0.11.0 doesn't support.
+                evmVersion: 'shanghai',
                 outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } },
                 optimizer: { enabled: true, runs: 200 },
             },
