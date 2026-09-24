@@ -26,9 +26,11 @@
             <el-form @submit.prevent="search" style="margin:12px 0 8px">
                 <el-input v-model="query" placeholder="搜索地址 / 区块Hash / 交易Hash" size="large" clearable @keyup.enter="search">
                     <template #prepend>
+                        <!-- Shard 2 is the root congress network and owns no
+                             normal accounts, so it is not offered here. -->
                         <el-select v-model="selectedShard" style="width:110px">
                             <el-option label="Auto (all)" value="auto" />
-                            <el-option v-for="s in [2,3,4,5,6]" :key="s" :label="`Shard ${s}`" :value="s" />
+                            <el-option v-for="s in SHARDS" :key="s" :label="`Shard ${s}`" :value="s" />
                         </el-select>
                     </template>
                     <template #append>

@@ -25,6 +25,11 @@
 
         </el-button-group>
 
+        <!-- Read-only: the shard follows the signing account, it is not chosen. -->
+        <el-tag v-if="selectedShard > 0" type="info" size="small" style="margin-top: 5px; margin-left: 10px;">
+            Shard {{ selectedShard }}
+        </el-tag>
+
         <el-tag v-if="transfer_mode" type="warning" style="margin-top: 5px;">转账模式</el-tag>
 
         <el-tag v-if="contract_address && !transfer_mode" type="success" style="margin-top: 5px;float: right;">{{ contract_address }}</el-tag>
@@ -40,6 +45,7 @@ import emitter from './EventBus';
 import { nextTick, ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { setGasPrefund, pollTxResult, queryAccountOnShard } from '../services/shardora'
+import { selectedShard, resolveShardForAccount } from '../services/shardState'
 import { getKeypair } from '../services/signing'
 
 const textarea = ref('')
@@ -157,6 +163,10 @@ onMounted(() => {
     emitterOn();
     if (privateKey.value) {
         emitter.emit('set_solidity_private_key', { prikey: privateKey.value })
+        // Warms the cache and populates the badge. Failure is silent here — the
+        // operations that actually need the shard report it when they run, and
+        // probing on mount would otherwise nag before the user has done anything.
+        resolveShardForAccount(privateKey.value).catch(() => {})
     }
 });
 
@@ -192,17 +202,29 @@ const CallGasPrepayment = async () => {
         return
     }
 
+    // The prefund is charged to the sender's shard, same as any other tx from
+    // this account, so it is resolved the same way. An unresolved account fails
+    // here rather than being sent to a default shard that may not be its own.
+    const shard = await resolveShardForAccount(privateKey.value)
+    if (shard === null) {
+        gas_waiting.value = false
+        appendLog(sep + `[Preset GAS] FAILED: 私钥对应账户在任何分片都不存在，请先领取测试币`)
+        ElMessage({ type: 'error', message: '账户不存在，无法设置 GAS 预存' })
+        return
+    }
+
     appendLog(sep +
         `[Preset GAS] Submitting prefund tx...` +
         `\n  From:         ${userAddr}` +
         `\n  Contract:     ${contractAddr}` +
         `\n  Prefund addr: ${contractAddr.padStart(40, '0') + userAddr.padStart(40, '0')}` +
         `\n  Step:         7 (kContractGasPrefund)` +
+        `\n  Shard:        ${shard}` +
         `\n  Amount:       ${gas_prefund.value}`)
 
     let result: { ok: boolean; msg: string; txHash?: string }
     try {
-        result = await setGasPrefund(privateKey.value, 3, contractAddr, gas_prefund.value)
+        result = await setGasPrefund(privateKey.value, shard, contractAddr, gas_prefund.value)
     } catch (e) {
         gas_waiting.value = false
         ElMessage({ type: 'error', message: 'Preset GAS failed: ' + e })
@@ -221,7 +243,7 @@ const CallGasPrepayment = async () => {
     appendLog(`\n[Preset GAS] Tx submitted\n  TxHash: ${txHash}`)
     ElMessage({ type: 'info', message: 'Preset GAS tx submitted, waiting for confirmation...' })
 
-    const pollResult = await pollTxResult(3, txHash, 60000, (attempt, elapsed) => {
+    const pollResult = await pollTxResult(shard, txHash, 60000, (attempt, elapsed) => {
         appendLog(`\n[${elapsed}s] Preset GAS: waiting (attempt ${attempt})`)
     })
 
@@ -236,7 +258,7 @@ const CallGasPrepayment = async () => {
 
     const prefundAddr = contractAddr.padStart(40, '0') + userAddr.padStart(40, '0')
     try {
-        const accInfo = await queryAccountOnShard(prefundAddr, 3)
+        const accInfo = await queryAccountOnShard(prefundAddr, shard)
         if (accInfo) {
             appendLog(`\n[Preset GAS] Prefund balance verified\n  Prefund addr: ${prefundAddr}\n  Balance: ${accInfo.balance}`)
             ElMessage({ type: 'success', message: `Preset GAS success! Prefund balance: ${accInfo.balance}` })

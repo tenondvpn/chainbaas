@@ -49,9 +49,16 @@ export function calcCreateAddress(senderHex: string, nonce: number): string {
     return Array.from(hash.slice(-20)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// Shard IDs on the network (2-6, i.e. 5 shards × 4 nodes each)
-export const SHARDS = [2, 3, 4, 5, 6]
+// Consensus shards, 3-6 (4 nodes each).
+//
+// Shard 2 is the root congress network (network_utils.h: kRootCongressNetworkId)
+// and does not run transaction consensus, so no tx may ever be addressed to it.
+// It answered `query_account` for at least one normal account, which is why it
+// used to be probed — the node's address cache on the root shard is not
+// authoritative for account ownership.
+export const SHARDS = [3, 4, 5, 6]
 export const DEFAULT_SHARD = 3
+export const ROOT_SHARD = 2
 
 function shardUrl(shardId: number): string {
     return `/api/shard${shardId}/`
@@ -98,7 +105,27 @@ export interface AccountInfo {
     balance: string
     nonce: string
     shard: number
+    /** The shard the node says owns this account. Authoritative over `shard`,
+     *  which is merely which node we happened to ask. */
+    shardingId?: number
     [key: string]: any
+}
+
+/**
+ * The shard that owns an account, as reported by the node itself.
+ *
+ * `query_account` returns a `shardingId` field naming the account's real shard,
+ * and that is what deployment and calls must key off — not the shard we asked,
+ * which can be a node holding a non-authoritative copy. Falls back to the probed
+ * shard only when the node omits the field.
+ *
+ * The root shard is never returned: it does not run consensus and owns no
+ * normal accounts.
+ */
+export function ownerShardOf(acc: AccountInfo | null | undefined, probedShard: number): number {
+    const reported = Number(acc?.shardingId)
+    if (Number.isFinite(reported) && reported >= 3) return reported
+    return probedShard
 }
 
 /**
@@ -111,7 +138,7 @@ export async function queryAccount(address: string): Promise<AccountInfo | null>
         try {
             const data = await post(shard, 'query_account', { address: hex })
             if (typeof data === 'object' && data !== null && data.balance !== undefined) {
-                return { ...data, shard }
+                return { ...data, shard: ownerShardOf(data, shard) }
             }
             // Sometimes returns plain text on error — skip
         } catch (_) {
@@ -129,7 +156,7 @@ export async function queryAccountOnShard(address: string, shardId: number): Pro
     try {
         const data = await post(shardId, 'query_account', { address: hex })
         if (typeof data === 'object' && data !== null && data.balance !== undefined) {
-            return { ...data, shard: shardId }
+            return { ...data, shard: ownerShardOf(data, shardId) }
         }
     } catch (_) {}
     return null
@@ -192,6 +219,59 @@ export async function waitForBalance(
             }
         } catch (_) {
             onProgress?.(attempt, Math.round((Date.now() - start) / 1000), null)
+        }
+        if (maxAttempts > 0 && attempt >= maxAttempts) break
+        if (Date.now() - start + intervalMs > timeoutMs) break
+        await new Promise(r => setTimeout(r, intervalMs))
+    }
+    return last
+}
+
+/**
+ * Same as `waitForBalance`, but searches every consensus shard instead of one.
+ *
+ * A recipient's shard is independent of the sender's, so polling the sender's
+ * shard for the recipient's balance reports "not found" for a transfer that
+ * succeeded — the account simply lives elsewhere. Each attempt fans out across
+ * all shards concurrently and takes the first that reports the account.
+ *
+ * `onProgress` receives the shard that answered, or null when no shard had the
+ * account on that attempt.
+ */
+export async function waitForBalanceAnyShard(
+    address: string,
+    timeoutMs = 60000,
+    intervalMs = 15000,
+    onProgress?: (attempt: number, elapsedSec: number, balance: string | null, shard: number | null) => void,
+    minBalance = 1n,
+    maxAttempts = 0,
+    stopWhenCredited = true,
+): Promise<AccountInfo | null> {
+    const start = Date.now()
+    let attempt = 0
+    let last: AccountInfo | null = null
+    while (true) {
+        attempt++
+        const elapsed = () => Math.round((Date.now() - start) / 1000)
+        try {
+            const results = await Promise.allSettled(
+                SHARDS.map(async (s) => {
+                    const acc = await queryAccountOnShard(address, s)
+                    return acc ? { ...acc, shard: ownerShardOf(acc, s) } : null
+                })
+            )
+            const hit = results
+                .map(r => (r.status === 'fulfilled' ? r.value : null))
+                .find((a): a is AccountInfo => a !== null)
+            if (hit) {
+                last = hit
+                onProgress?.(attempt, elapsed(), hit.balance, hit.shard)
+                if (stopWhenCredited && BigInt(hit.balance ?? '0') >= minBalance) return hit
+            } else {
+                onProgress?.(attempt, elapsed(), null, null)
+            }
+        } catch (_) {
+            onProgress?.(attempt, elapsed(), null, null)
         }
         if (maxAttempts > 0 && attempt >= maxAttempts) break
         if (Date.now() - start + intervalMs > timeoutMs) break
@@ -318,6 +398,12 @@ export interface TransferOpts {
 
 export async function transfer(opts: TransferOpts): Promise<{ ok: boolean; msg: string; txHash?: string; raw?: any }> {
     const shardId = opts.shardId ?? DEFAULT_SHARD
+    // Hard stop. The root congress shard runs no transaction consensus, so a tx
+    // sent there is not merely misdirected — it can never be included. Guarding
+    // here rather than at each caller means no future call site can regress it.
+    if (shardId === ROOT_SHARD) {
+        return { ok: false, msg: `分片 ${ROOT_SHARD} 是 root 分片，不处理交易共识，拒绝发送` }
+    }
     const keypair = getKeypair(opts.privateKeyHex)
     const fromAddr = keypair.accountId
 
@@ -786,7 +872,7 @@ export async function explorerGetContractTxs(
     try {
         const params: Record<string, any> = { addr, limit }
         if (beforeId) params.before_id = beforeId
-        return await get<any>(shardId, 'explorer/address/txs', params)
+        return await get<any>(shardId, 'explorer/address_txs', params)
     } catch (_) {
         return null
     }

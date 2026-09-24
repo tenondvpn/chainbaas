@@ -22,7 +22,7 @@
                     · balance {{ hit.balance }} · nonce {{ hit.nonce }} · {{ hit.tx_count }} txs
                 </div>
                 <div class="hit-actions">
-                    <el-button link type="primary" size="small" @click="useAddress(hit.address)">填入</el-button>
+                    <el-button link type="primary" size="small" @click="useAddress(hit.address, hit.shard_id)">填入</el-button>
                     <el-button link size="small" @click="copyAddress(hit.address)">复制</el-button>
                 </div>
             </div>
@@ -139,7 +139,8 @@ import UpdateFolder from './UpdateFolder.vue'
 import { ElMessageBox } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useEventListener } from '@vueuse/core'
-import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer, explorerSearch } from '../services/shardora'
+import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer, explorerSearch, SHARDS } from '../services/shardora'
+import { selectedShard, rememberContractShard } from '../services/shardState'
 
 const createSolidity = ref(false)
 const drawer_direction = ref<DrawerProps['direction']>('rtl')
@@ -578,8 +579,12 @@ const clickDeletePipeline = (nodeData) => {
             if (action === 'confirm') {
                 instance.confirmButtonLoading = true
                 instance.confirmButtonText = 'Deleting...'
-                const contractAddr = ('' + nodeData.key).replace(/^contract-/, '')
-                deleteContractFromExplorer(3, contractAddr)
+                // Node keys are `contract-<shard>-<addr>`; a plain prefix strip
+                // would leave the shard in the address and delete on shard 3.
+                const keyParts = ('' + nodeData.key).split('-')
+                const contractShard = Number(keyParts[1])
+                const contractAddr = keyParts.slice(2).join('-')
+                deleteContractFromExplorer(contractShard, contractAddr)
                     .then(result => {
                         if (!result.ok) {
                             done()
@@ -644,10 +649,16 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
     // Chain contract leaf node
     if (str_id.startsWith('contract-')) {
         let contract = chainContractMap.get(str_id)
+        // The list is merged across shards, so every operation on a contract has
+        // to use the shard it came from. Recording it here is what keeps call and
+        // query pointed at the right one after a cross-shard click — the shard is
+        // a property of the contract, not of whichever account happens to sign.
+        const contractShard = Number(contract?.shard_id ?? selectedShard.value)
+        if (contract?.addr) rememberContractShard(contract.addr, contractShard)
         // Fetch full detail if source_code not yet loaded
         if (contract && !contract._detail_loaded) {
             try {
-                const detail = await explorerGetContract(3, contract.addr)
+                const detail = await explorerGetContract(contractShard, contract.addr)
                 if (detail) {
                     Object.assign(contract, detail)
                     contract._detail_loaded = true
@@ -659,6 +670,9 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
             code: contract.source_code ?? '',
             address: contract.addr ?? '',
             abi: contract.abi ?? '[]',
+            // Carried through so the editor can re-verify the contract against the
+            // shard it actually lives on rather than whatever is selected later.
+            shard: contractShard,
         })
         emitter.emit('show_update_graph', { tag: '1', project_path: '/链上合约', pipe_id: str_id })
         emitter.emit('update_graph', {
@@ -677,27 +691,44 @@ const GetProjectsAndPipelines = async () => {
     const rootId = 'chain-root'
     appendNode(-1, { id: rootId, text: '链上合约', is_project: true, pipe_id: 0 }, false)
 
-    try {
-        const resp = await explorerGetContracts(3, { limit: 100 })
-        const items: any[] = Array.isArray(resp?.data) ? resp.data
-            : Array.isArray(resp?.items) ? resp.items
-            : Array.isArray(resp?.data?.items) ? resp.data.items
-            : []
-        for (const contract of items) {
+    // One request per shard, merged into a single list. allSettled rather than
+    // all: a shard that is unreachable should cost its own contracts and nothing
+    // else, where Promise.all would reject the whole load on one bad shard.
+    const perShard = await Promise.allSettled(
+        SHARDS.map(async (s) => {
+            const resp = await explorerGetContracts(s, { limit: 100 })
+            const items: any[] = Array.isArray(resp?.data) ? resp.data
+                : Array.isArray(resp?.items) ? resp.items
+                : Array.isArray(resp?.data?.items) ? resp.data.items
+                : []
+            return items.map(c => ({ ...c, shard_id: c.shard_id ?? s }))
+        })
+    )
+
+    for (const outcome of perShard) {
+        if (outcome.status !== 'fulfilled') {
+            console.warn('Failed to load contracts from a shard:', outcome.reason)
+            continue
+        }
+        for (const contract of outcome.value) {
             const addr: string = contract.addr ?? ''
-            const nodeId = `contract-${addr}`
+            const shard = Number(contract.shard_id)
+            // Node id is shard-qualified: the same address can exist on several
+            // shards, and a bare `contract-${addr}` would make the later shard
+            // silently overwrite the earlier node's map entry.
+            const nodeId = `contract-${shard}-${addr}`
             const srcName = contract.source_code
                 ? (contract.source_code.match(/contract\s+(\w+)/)?.[1] ?? '')
                 : ''
             const shortAddr = addr.length > 12
                 ? addr.slice(0, 6) + '...' + addr.slice(-4)
                 : (addr || '?')
-            const label = srcName ? `${srcName} (${shortAddr})` : shortAddr
+            // The shard is part of the label so two same-named contracts from
+            // different shards are distinguishable in the tree.
+            const label = (srcName ? `${srcName} (${shortAddr})` : shortAddr) + ` · S${shard}`
             chainContractMap.set(nodeId, contract)
             appendNode(rootId, { id: nodeId, text: label, is_project: false, pipe_id: 0 }, false)
         }
-    } catch (e) {
-        console.error('Failed to load chain contracts:', e)
     }
 
     treeRef.value?.expandNode(treeRef.value.getNode(rootId))
@@ -808,7 +839,7 @@ const onQueryEnter = async () => {
     if (searchTimer) clearTimeout(searchTimer)
     await runSearch()
     const exact = hits.value.find(h => h.exact)
-    if (exact) useAddress(exact.address)
+    if (exact) useAddress(exact.address, exact.shard_id)
 }
 
 const filterMethod = (query: string, node: TreeNodeData) =>
@@ -825,13 +856,19 @@ const copyAddress = async (addr: string) => {
 }
 
 // Jump to a contract node if the address is in the loaded list, otherwise copy.
-// Node ids are built from the contracts table's addr, which may or may not carry
-// a 0x prefix, so compare on the hex body rather than the raw string.
-const useAddress = (addr: string) => {
+// Node ids are `contract-<shard>-<addr>`, and the contracts table's addr may or
+// may not carry a 0x prefix, so match on the hex body rather than the raw string.
+// `shard` is supplied by search hits, which know which shard matched; without it
+// the first shard holding that address wins.
+const useAddress = (addr: string, shard?: number) => {
     const want = addr.toLowerCase().replace(/^0x/, '')
-    const node = (data.value as any[])
-        .find(n => ('' + n.id).startsWith('contract-') &&
-                   ('' + n.id).slice('contract-'.length).toLowerCase().replace(/^0x/, '') === want)
+    const node = (data.value as any[]).find(n => {
+        if (!('' + n.id).startsWith('contract-')) return false
+        const parts = ('' + n.id).split('-')
+        const nodeAddr = (parts[2] ?? '').toLowerCase().replace(/^0x/, '')
+        if (nodeAddr !== want) return false
+        return shard === undefined || Number(parts[1]) === shard
+    })
     if (node) {
         treeRef.value?.setCurrentKey(node.id)
         handleNodeClick({ id: node.id }, null)

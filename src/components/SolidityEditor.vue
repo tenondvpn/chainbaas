@@ -107,6 +107,7 @@ import {
     updateContract,
     waitForBalance,
 } from '../services/shardora'
+import { selectedShard, resolveShardForAccount, knownContractShard, rememberContractShard } from '../services/shardState'
 import { getKeypair } from '../services/signing'
 import { Prec } from '@codemirror/state';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -195,7 +196,7 @@ emitter.on('transfer_mode_changed', (open: boolean) => {
 });
 
 emitter.on('compile_solidity_code', (code: string) => {
-    compileSolidity(3, codeValue.value).then(response => {
+    compileSolidity(0, codeValue.value).then(response => {
         emitter.emit('compile_solidity_code_res', response);
         if (response.status != 0) {
             console.log("Compilation error:", response.msg);
@@ -304,7 +305,7 @@ const base64ToHexLower = (base64Str) => {
   }
 };
 
-const update_graph = (data) => {
+const update_graph = async (data) => {
     contractAddress.value = '';
     currentDraftName.value = ''
     emitter.emit('deploy_solidity_code_res', {"status": 1, "id": ""});
@@ -321,7 +322,20 @@ const update_graph = (data) => {
             contractAddress.value = obj["address"]
             abiJson.value = JSON.parse(obj["abi"])
             console.log("test get abi: ", obj["abi"])
-            explorerGetContract(3, obj["address"]).then(detail => {
+            // Verify against the shard the contract was stored with, not the
+            // caller's — a lookup on the wrong shard reports a live contract as
+            // missing. The saved payload carries the shard when the contract came
+            // from the tree; a graph saved before this field existed falls back to
+            // whatever was last remembered, then to the account's own shard.
+            const detailShard = Number(obj["shard"])
+                || knownContractShard(obj["address"])
+                || await resolveShardForAccount(preivateKey.value)
+            if (!detailShard) {
+                emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "无法确定合约所在分片"})
+                return
+            }
+            rememberContractShard(obj["address"], detailShard)
+            explorerGetContract(detailShard, obj["address"]).then(detail => {
                 if (detail) {
                     emitter.emit('deploy_solidity_code_res', {"status": 0, "id": detail.addr ?? obj["address"]});
                 } else {
@@ -508,7 +522,7 @@ async function callFunction() {
     // If ABI not loaded, compile source code in memory to get it
     if (!abiJson.value || abiJson.value.length === 0) {
         try {
-            const compileResult = await compileSolidity(3, codeValue.value)
+            const compileResult = await compileSolidity(0, codeValue.value)
             if (compileResult.status !== 0) {
                 ElMessage({ type: 'error', message: 'Cannot get ABI (compile failed): ' + compileResult.msg })
                 run_loading.value = false
@@ -542,7 +556,7 @@ async function callFunction() {
     const selectedFunction = otherFunctions.value.find(func => func.name === form.function);
     if (selectedFunction.stateMutability == "view") {
         // ABI-encode the function call via web3
-        import('web3').then(({ Web3 }) => {
+        import('web3').then(async ({ Web3 }) => {
             const w3 = new Web3()
             const funcAbi = abiJson.value.find(i => i.type === 'function' && i.name === form.function)
             let inputHex = ''
@@ -560,7 +574,18 @@ async function callFunction() {
                 `\n  Contract: ${contractHexView}` +
                 `\n  Input:    ${inputHex.slice(0, 64)}${inputHex.length > 64 ? '...(total ' + Math.floor(inputHex.length / 2) + ' bytes)' : ''}`
             )
-            abiQueryContract(3, contractAddress.value, inputHex, preivateKey.value ? undefined : undefined)
+            // A view call reads wherever the contract lives, which is not
+            // necessarily where the caller's account lives. The contract's own
+            // shard is preferred; if it was never learned, the caller's shard is
+            // the best available guess.
+            const readShard = knownContractShard(contractAddress.value)
+                ?? await resolveShardForAccount(preivateKey.value)
+            if (readShard === null) {
+                run_loading.value = false
+                ElMessage({ type: 'error', message: '账户不存在于任何分片，无法查询合约' })
+                return
+            }
+            abiQueryContract(readShard, contractAddress.value, inputHex, preivateKey.value ? undefined : undefined)
                 .then(result => {
                     run_loading.value = false
                     if (!result.ok) {
@@ -595,7 +620,7 @@ async function callFunction() {
         })
     } else {
         // ABI-encode and submit as a write transaction
-        import('web3').then(({ Web3 }) => {
+        import('web3').then(async ({ Web3 }) => {
             const w3 = new Web3()
             const funcAbi = abiJson.value.find(i => i.type === 'function' && i.name === form.function)
             let inputHex = ''
@@ -608,6 +633,18 @@ async function callFunction() {
                 return
             }
             const fromAddrWrite = (() => { try { return getKeypair(preivateKey.value).accountId } catch { return '' } })()
+
+            // A write tx is sent from the caller's shard, so that is the shard it
+            // must be addressed to. No fallback: a wrong shard would sign against
+            // a state the contract is not in.
+            const writeShard = await resolveShardForAccount(preivateKey.value)
+            if (writeShard === null) {
+                run_loading.value = false
+                emitter.emit('deploy_progress', `\n[✗] ${form.function} FAILED: 私钥对应账户在任何分片都不存在，请先领取测试币`)
+                ElMessage({ type: 'error', message: '账户不存在，无法调用合约' })
+                return
+            }
+
             const contractHexWrite = contractAddress.value.toLowerCase().replace(/^0x/, '')
             emitter.emit('deploy_progress',
                 `\n[Call: ${form.function}] Tx submitting` +
@@ -620,7 +657,7 @@ async function callFunction() {
             )
             callContractWrite({
                 privateKeyHex: preivateKey.value,
-                shardId: 3,
+                shardId: writeShard,
                 contractAddr: contractAddress.value,
                 inputHex,
                 amount: transfer_amount.value,
@@ -645,7 +682,7 @@ async function callFunction() {
                 })
                 // Poll receipt to confirm actual on-chain result
                 const funcName = form.function
-                pollTxResult(3, txHash, 60000, (attempt, elapsed) => {
+                pollTxResult(writeShard, txHash, 60000, (attempt, elapsed) => {
                     emitter.emit('deploy_progress', `[${elapsed}s] ${funcName}: waiting for confirmation (attempt ${attempt})`)
                 }).then(pollResult => {
                     emitter.emit('call_function_solidity_code_res', {
@@ -672,7 +709,7 @@ async function callFunction() {
 
 }
 
-function deploySolidity() {
+async function deploySolidity() {
     dialogTitle.value = 'Enter Constructor Parameters'
     not_constructer.value = false
     var types = []
@@ -690,7 +727,17 @@ function deploySolidity() {
         values.push(arg.value)
     }
 
-    compileSolidity(3, codeValue.value)
+    // Resolved before compiling: if the account is unknown there is no shard to
+    // deploy to, and discovering that after a compile would only be slower.
+    const deployShard = await resolveShardForAccount(preivateKey.value)
+    if (deployShard === null) {
+        run_loading.value = false
+        emitter.emit('deploy_progress', '\n[✗] Deploy FAILED: 私钥对应账户在任何分片都不存在，请先领取测试币')
+        ElMessage({ type: 'error', message: '账户不存在于任何分片，无法部署合约' })
+        return
+    }
+
+    compileSolidity(0, codeValue.value)
         .then(data => {
             emitter.emit('compile_solidity_code_res', data);
             if (data.status != 0) {
@@ -723,7 +770,7 @@ function deploySolidity() {
             // Deploy directly to blockchain node with source code embedded
             deployContractDirect({
                 privateKeyHex: preivateKey.value,
-                shardId: 3,
+                shardId: deployShard,
                 bytecode: data.bytecode,
                 abiJson: data.abi,
                 sourceCode: codeValue.value,
@@ -757,7 +804,7 @@ function deploySolidity() {
                 )
                 ElMessage({ type: 'info', message: 'Deployment tx submitted, checking...' })
 
-                const polled = await pollForDeployedContract(3, computedAddr, txHash, 120000, (attempt, elapsed, phase) => {
+                const polled = await pollForDeployedContract(deployShard, computedAddr, txHash, 120000, (attempt, elapsed, phase) => {
                     if (phase === 'tx') {
                         emitter.emit('deploy_progress', `[${elapsed}s] Waiting for tx confirmation... (attempt ${attempt})`)
                     } else {
@@ -774,7 +821,7 @@ function deploySolidity() {
                     // The contract address exists as soon as the deploy tx lands,
                     // but its account row can lag the receipt. A deploy carries no
                     // value, so only existence is being waited on here.
-                    const acc = await waitForBalance(addr, 3, 60000, 15000,
+                    const acc = await waitForBalance(addr, deployShard, 60000, 15000,
                         (attempt, elapsed, bal) => {
                             emitter.emit('deploy_progress',
                                 `[${elapsed}s] Contract account: attempt ${attempt}` +
@@ -787,7 +834,8 @@ function deploySolidity() {
                     ElMessage({ type: 'success', message: 'Contract deployed: ' + addr })
                     // Save source code and ABI to node's SQLite (separate from deploy tx)
                     const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : '[]'
-                    updateContract(3, addr, codeValue.value, abiStr, '')
+                    rememberContractShard(addr, deployShard)
+                    updateContract(deployShard, addr, codeValue.value, abiStr, '')
                         .catch(err => console.warn('updateContract after deploy failed:', err))
                     prev_save_graph_tm_ms = 0
                     prev_saved_code.value = ''
@@ -1240,7 +1288,16 @@ const TimeToSaveGraph = () => {
         prev_saved_code.value = codeValue.value
         if (contractAddress.value) {
             const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : ''
-            updateContract(3, contractAddress.value, codeValue.value, abiStr, '')
+            // Editing a contract this session did not deploy: its shard came from
+            // the tree (remembered on open) or is unknown. Writing without a known
+            // shard would save against the wrong chain's copy, so it is skipped
+            // rather than guessed — the code is still in the editor either way.
+            const saveShard = knownContractShard(contractAddress.value)
+            if (saveShard === null) {
+                console.log('auto-save skipped: shard unknown for contract', contractAddress.value)
+                return
+            }
+            updateContract(saveShard, contractAddress.value, codeValue.value, abiStr, '')
                 .catch(error => console.log('auto-save contract failed:', error))
         } else {
             // No deployed address yet — save as local draft keyed by contract name

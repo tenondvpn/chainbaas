@@ -28,7 +28,8 @@
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import emitter from './EventBus';
-import { transfer, pollTxResult, queryAccountOnShard, waitForBalance, DEFAULT_SHARD } from '../services/shardora';
+import { transfer, pollTxResult, queryAccountOnShard, waitForBalanceAnyShard } from '../services/shardora';
+import { resolveShardForAccount } from '../services/shardState';
 import { getKeypair } from '../services/signing';
 
 const transferWaiting = ref(false)
@@ -53,8 +54,15 @@ const refreshSender = async () => {
         ElMessage({ type: 'error', message: '私钥无效: ' + e })
         return
     }
+    // The sender's shard is wherever its account lives; a balance read on any
+    // other shard would report a different address space entirely.
+    const shard = await resolveShardForAccount(pk)
+    if (shard === null) {
+        senderBalance.value = null
+        return
+    }
     try {
-        const acc = await queryAccountOnShard(senderAddr.value, DEFAULT_SHARD)
+        const acc = await queryAccountOnShard(senderAddr.value, shard)
         senderBalance.value = acc ? acc.balance : '0'
     } catch (_) {
         senderBalance.value = null
@@ -86,13 +94,23 @@ const doTransfer = async () => {
     const sep = '\n------------------------\n'
     const amount = transferForm.value.amount
 
+    // A transfer originates from the sender's shard, so that is the shard it is
+    // addressed to. Fatal when unresolved: there is no default to fall back on.
+    const shard = await resolveShardForAccount(pk)
+    if (shard === null) {
+        transferWaiting.value = false
+        statusLog(sep + `[Transfer] FAILED: 私钥对应账户在任何分片都不存在，请先领取测试币`)
+        ElMessage({ type: 'error', message: '账户不存在于任何分片，无法转账' })
+        return
+    }
+
     statusLog(sep +
         `[Transfer] Submitting transfer tx...` +
         `\n  From:   ${senderAddr.value}` +
         `\n  To:     ${to}` +
         `\n  Amount: ${amount}` +
         `\n  GasLimit: ${transferForm.value.gasLimit}` +
-        `\n  Shard:  ${DEFAULT_SHARD}  Step: 0 (kTransfer)`)
+        `\n  Shard:  ${shard}  Step: 0 (kTransfer)`)
 
     // ── Stage 1: submit the signed tx to the node ──
     let result: { ok: boolean; msg: string; txHash?: string }
@@ -101,7 +119,7 @@ const doTransfer = async () => {
             privateKeyHex: pk,
             to,
             amount,
-            shardId: DEFAULT_SHARD,
+            shardId: shard,
             step: 0,
             gasLimit: transferForm.value.gasLimit,
         })
@@ -124,7 +142,7 @@ const doTransfer = async () => {
     ElMessage({ type: 'info', message: '转账已提交，等待确认...' })
 
     // ── Stage 2: poll the receipt until it is final ──
-    const pollResult = await pollTxResult(DEFAULT_SHARD, txHash, 60000, (attempt, elapsed) => {
+    const pollResult = await pollTxResult(shard, txHash, 60000, (attempt, elapsed) => {
         statusLog(`\n[${elapsed}s] Transfer: waiting (attempt ${attempt})`)
     })
 
@@ -139,40 +157,45 @@ const doTransfer = async () => {
 
     // ── Stage 3: read both balances back ──
     // The sender is read once, straight after confirmation — nothing runs before
-    // it, so its result is the balance as of the tx landing.
+    // it, so its result is the balance as of the tx landing. Its shard is known:
+    // the tx was sent from it.
     //
-    // The recipient is polled instead: a fresh account has no row in the node's
-    // table until the crediting tx is applied, which can lag the receipt. Five
-    // probes, 5s apart. stopWhenCredited=false keeps all five running even once a
-    // balance shows up, so every attempt is printed rather than the sweep
-    // stopping at the first hit. A probe that throws counts as a miss and the
-    // loop continues.
+    // The recipient is polled instead, and across every shard. A recipient's shard
+    // is independent of the sender's — polling only the sender's shard reports
+    // "not found" for a transfer that in fact succeeded, because the account lives
+    // elsewhere. Each attempt fans out over all consensus shards concurrently.
+    //
+    // Five attempts, 5s apart. stopWhenCredited=false keeps all five running even
+    // once a balance shows up, so every attempt is printed rather than the sweep
+    // stopping at the first hit. A probe that throws counts as a miss.
     const sep2 = '\n------------------------\n'
     let fromBal = '查询失败'
     try {
-        const fromAcc = await queryAccountOnShard(senderAddr.value, DEFAULT_SHARD)
+        const fromAcc = await queryAccountOnShard(senderAddr.value, shard)
         fromBal = fromAcc ? fromAcc.balance : '0'
         statusLog(sep2 +
             `[Transfer] Sender balance` +
             `\n  Address: ${senderAddr.value}` +
+            `\n  Shard:   ${shard}` +
             `\n  Balance: ${fromBal}`)
     } catch (e) {
         statusLog(sep2 + `[Transfer] Sender balance query error: ${e}`)
     }
 
-    statusLog(`\n[Transfer] Querying receiver balance (5 attempts, every 5s)...`)
-    const toAcc = await waitForBalance(to, DEFAULT_SHARD, 60000, 5000,
-        (attempt, elapsed, bal) => {
+    statusLog(`\n[Transfer] Querying receiver balance across shards (5 attempts, every 5s)...`)
+    const toAcc = await waitForBalanceAnyShard(to, 60000, 5000,
+        (attempt, elapsed, bal, atShard) => {
             statusLog(`\n[${elapsed}s] Receiver balance: attempt ${attempt}/5` +
-                (bal === null ? ' — 账户未出现' : ` — ${bal}`))
+                (bal === null ? ' — 所有分片均未出现' : ` — shard ${atShard} — ${bal}`))
         }, 1n, 5, false)
-    const toBal = toAcc ? toAcc.balance : '账户不存在（已查询 5 次）'
+    const toBal = toAcc ? toAcc.balance : '账户不存在（5 次跨分片查询均未命中）'
 
     senderBalance.value = fromBal
+    const toShardLabel = toAcc ? `shard ${toAcc.shard}` : '未找到'
     statusLog(`\n[Transfer] Balances after transfer` +
-        `\n  Sender   ${senderAddr.value}` +
+        `\n  Sender   ${senderAddr.value}  (shard ${shard})` +
         `\n  Balance: ${fromBal}` +
-        `\n  Receiver ${to}` +
+        `\n  Receiver ${to}  (${toShardLabel})` +
         `\n  Balance: ${toBal}`)
     ElMessage({ type: 'success', message: `转账成功！接收方余额: ${toBal}` })
     transferWaiting.value = false
