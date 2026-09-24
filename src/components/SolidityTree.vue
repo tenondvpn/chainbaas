@@ -1,6 +1,38 @@
 <template>
-    <el-input class="esponsive-input" v-model="query" placeholder="Please enter keyword" @input="onQueryChanged"
-        :prefix-icon="Search" />
+    <!-- Search input. Doubles as the address lookup: a bare hex string of 40+
+         chars (0x optional) is looked up in the explorer's address table as a
+         prefix. Shorter input just filters the tree locally. -->
+    <el-popover :visible="results_visible" placement="bottom-start" :width="560" trigger="manual"
+        popper-class="addr-search-popper">
+        <div v-if="searching" style="padding: 4px 2px; font-size: 12px; color: #888;">Searching...</div>
+        <div v-else-if="hits.length === 0" style="padding: 4px 2px; font-size: 12px; color: #888;">
+            No address matched {{ normalisedQuery }}...
+        </div>
+        <template v-else>
+            <div v-for="hit in hits" :key="hit.address" class="hit-row">
+                <div class="hit-main">
+                    <span class="hit-addr">{{ hit.address }}</span>
+                    <el-tag :type="hit.is_contract ? 'success' : 'info'" size="small" effect="plain">
+                        {{ hit.is_contract ? '合约' : addressKind(hit) }}
+                    </el-tag>
+                </div>
+                <div class="hit-detail">
+                    {{ addrHexLen(hit.address) > 40 ? `prefund (to+from, ${addrHexLen(hit.address) / 2} bytes)` : 'shard ' + hit.shard_id }}
+                    <template v-if="hit.pool_index >= 0"> · pool {{ hit.pool_index }}</template>
+                    · balance {{ hit.balance }} · nonce {{ hit.nonce }} · {{ hit.tx_count }} txs
+                </div>
+                <div class="hit-actions">
+                    <el-button link type="primary" size="small" @click="useAddress(hit.address)">填入</el-button>
+                    <el-button link size="small" @click="copyAddress(hit.address)">复制</el-button>
+                </div>
+            </div>
+        </template>
+        <template #reference>
+            <el-input class="esponsive-input" v-model="query" :prefix-icon="Search"
+                :placeholder="'搜索合约 / 账户 / prefund 地址（≥40位hex前缀）或合约名'"
+                @input="onQueryChanged" @keyup.enter="onQueryEnter" @clear="results_visible = false" clearable />
+        </template>
+    </el-popover>
 
     <div :class="{ appContainerDark: isDark, appContainerLight: !isDark }" :style="`min-height: ${dynamicTreeHeight}px;`">
         <div class="tree-container" ref="treeContainerRef">
@@ -33,6 +65,10 @@
                                     <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="新建合约">
                                         <el-button plain type="success" size="small" :icon="Plus"
                                             @click.stop="addPipelineClicked(node)" />
+                                    </el-tooltip>
+                                    <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="转账">
+                                        <el-button plain type="warning" size="small" :icon="Promotion"
+                                            @click.stop="openTransfer(node)" />
                                     </el-tooltip>
                                     <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="刷新列表">
                                         <el-button plain type="primary" size="small" :icon="Refresh"
@@ -88,8 +124,8 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onBeforeUnmount, h, nextTick } from 'vue';
-import { Plus, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument, Refresh } from '@element-plus/icons-vue'
+import { ref, computed, onMounted, onBeforeUnmount, h, nextTick } from 'vue';
+import { Plus, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument, Refresh, Promotion } from '@element-plus/icons-vue'
 import type { TreeNodeData } from 'element-plus'
 import { useDark } from "@vueuse/core";
 import axios from 'axios';
@@ -103,7 +139,7 @@ import UpdateFolder from './UpdateFolder.vue'
 import { ElMessageBox } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useEventListener } from '@vueuse/core'
-import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer } from '../services/shardora'
+import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer, explorerSearch } from '../services/shardora'
 
 const createSolidity = ref(false)
 const drawer_direction = ref<DrawerProps['direction']>('rtl')
@@ -152,6 +188,25 @@ const labelPosition = ref<FormProps['labelPosition']>('top')
 const isDark = useDark();
 const pipelineNameToCopy = ref("")
 const chainContractMap = new Map<string, any>()
+
+// ─── Address search ───────────────────────────────────────────────────────────
+// Minimum prefix length before hitting the node, counted in hex characters
+// (0x excluded). Stored addresses are 40 hex chars (account/contract) or 80
+// (contract gas prefund); a shorter prefix can never disambiguate anything, so
+// it stays a local tree filter.
+const MIN_SEARCH_HEX = 40
+
+const hits = ref<any[]>([])
+const results_visible = ref(false)
+const searching = ref(false)
+let searchTimer: any = null
+
+const normalisedQuery = computed(() => query.value.trim().toLowerCase().replace(/^0x/, ''))
+
+// Stored addresses carry a 0x prefix, so an account is 42 chars and a contract
+// gas-prefund address (to||from, 40 bytes) is 82.
+const addrHexLen = (a: string) => (a ?? '').replace(/^0x/i, '').length
+const addressKind = (hit: any) => addrHexLen(hit.address) > 40 ? 'prefund' : '账户'
 
 const emitterOn = () => {
 
@@ -688,6 +743,14 @@ useEventListener(window, 'resize', () => {
     dynamicTreeHeight.value = window.innerHeight - 130
 })
 
+// Dismiss the search result popover on any click outside it.
+useEventListener(window, 'click', (ev: MouseEvent) => {
+    if (!results_visible.value) return
+    const el = ev.target as HTMLElement | null
+    if (el && (el.closest('.addr-search-popper') || el.closest('.esponsive-input'))) return
+    results_visible.value = false
+})
+
 onMounted(() => {
     dynamicTreeHeight.value = window.innerHeight - 130
     emitterOn()
@@ -718,11 +781,77 @@ onBeforeUnmount(() => {
 });
 
 
-const onQueryChanged = (query: string) => {
-    treeRef.value!.filter(query)
+const onQueryChanged = (value: string) => {
+    treeRef.value!.filter(value)
+
+    // Below the threshold the input is only a tree filter, not an address lookup.
+    if (normalisedQuery.value.length < MIN_SEARCH_HEX) {
+        results_visible.value = false
+        hits.value = []
+        return
+    }
+
+    if (searchTimer) clearTimeout(searchTimer)
+    searching.value = true
+    results_visible.value = true
+    searchTimer = setTimeout(runSearch, 250)
 }
+
+const runSearch = async () => {
+    hits.value = await explorerSearch(normalisedQuery.value, 50)
+    searching.value = false
+}
+
+// Enter with a full 40-hex prefix that matches exactly one contract jumps to it.
+const onQueryEnter = async () => {
+    if (normalisedQuery.value.length < MIN_SEARCH_HEX) return
+    if (searchTimer) clearTimeout(searchTimer)
+    await runSearch()
+    const exact = hits.value.find(h => h.exact)
+    if (exact) useAddress(exact.address)
+}
+
 const filterMethod = (query: string, node: TreeNodeData) =>
-    node.label!.includes(query)
+    (node.label ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    ('' + node.id).toLowerCase().includes(query.toLowerCase())
+
+const copyAddress = async (addr: string) => {
+    try {
+        await navigator.clipboard.writeText(addr)
+        ElMessage({ type: 'success', message: '已复制地址' })
+    } catch (e) {
+        ElMessage({ type: 'error', message: '复制失败: ' + e })
+    }
+}
+
+// Jump to a contract node if the address is in the loaded list, otherwise copy.
+// Node ids are built from the contracts table's addr, which may or may not carry
+// a 0x prefix, so compare on the hex body rather than the raw string.
+const useAddress = (addr: string) => {
+    const want = addr.toLowerCase().replace(/^0x/, '')
+    const node = (data.value as any[])
+        .find(n => ('' + n.id).startsWith('contract-') &&
+                   ('' + n.id).slice('contract-'.length).toLowerCase().replace(/^0x/, '') === want)
+    if (node) {
+        treeRef.value?.setCurrentKey(node.id)
+        handleNodeClick({ id: node.id }, null)
+    } else {
+        copyAddress(addr)
+    }
+    results_visible.value = false
+}
+
+// The transfer form itself lives in SolidityTransfer.vue, rendered in place of
+// the code editor so the status box underneath stays visible. Only the key is
+// checked here, so the click fails fast before the pane switches.
+const openTransfer = () => {
+    const pk = localStorage.getItem('solidity_private_key') ?? ''
+    if (!pk || pk.length !== 64) {
+        ElMessage({ type: 'error', message: '请先在右上角设置私钥' })
+        return
+    }
+    emitter.emit('open_transfer', { open: true })
+}
 
 const findNode = (id, nodes) => {
     for (let i = 0; i < nodes.length; i++) {
@@ -849,9 +978,55 @@ const appendNode = (parentId, item, autoSelect = true) => {
     opacity: 1;
 }
 
+/* The template spells this class "esponsive-input" (typo, pre-existing) —
+   .responsive-input alone never matched anything. */
+.esponsive-input,
 .responsive-input {
     width: 240px;
 }
+</style>
+
+<style>
+/* The popover body is teleported outside this component, so it needs global
+   rules rather than scoped ones. */
+.addr-search-popper .hit-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.addr-search-popper .hit-row:last-child {
+    border-bottom: none;
+}
+
+.addr-search-popper .hit-main {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.addr-search-popper .hit-addr {
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.addr-search-popper .hit-detail {
+    flex: 1 1 auto;
+    font-size: 11px;
+    color: #888;
+    word-break: break-all;
+}
+
+.addr-search-popper .hit-actions {
+    flex: 0 0 auto;
+}
+
 
 @media (max-width: 768px) {
     .input-container {
@@ -859,6 +1034,7 @@ const appendNode = (parentId, item, autoSelect = true) => {
         gap: 1rem;
     }
 
+    .esponsive-input,
     .responsive-input {
         width: 100%;
     }

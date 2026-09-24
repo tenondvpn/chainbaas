@@ -105,6 +105,7 @@ import {
     callContractWrite,
     explorerGetContract,
     updateContract,
+    waitForBalance,
 } from '../services/shardora'
 import { getKeypair } from '../services/signing'
 import { Prec } from '@codemirror/state';
@@ -136,9 +137,9 @@ const formLabelWidth = '140px'
 const not_constructer = ref(false)
 const dialogTitle = ref('Enter Constructor Parameters')
 const contractAddress = ref('')
-const gas_prefund = ref(99999999)
+const gas_prefund = ref(999999)
 const transfer_amount = ref(0)
-const gas_limit = ref(9999999999)
+const gas_limit = ref(999999)
 const run_loading = ref(false)
 const abiJson = ref(null)
 const isDark = useDark();
@@ -181,6 +182,16 @@ emitter.on('set_solidity_private_key', (key: string) => {
     run_loading.value = false
     preivateKey.value = key["prikey"];
     test_url.value = key["url"];
+});
+
+emitter.on('transfer_mode_changed', (open: boolean) => {
+    transfer_mode.value = !!open
+    // Leaving transfer mode must not immediately re-save a stale code value:
+    // the timer compares against prev_saved_code, which still holds the last
+    // written state, so resync the timestamp instead.
+    if (!transfer_mode.value) {
+        prev_save_graph_tm_ms = getTimestamp()
+    }
 });
 
 emitter.on('compile_solidity_code', (code: string) => {
@@ -264,6 +275,7 @@ const emitterOff = () => {
     emitter.off('deploy_solidity_code', null);
     emitter.off('call_function_solidity_code', null);
     emitter.off("theme_changed", null);
+    emitter.off('transfer_mode_changed', null);
 }
 
 function isValidJSON(str) {
@@ -335,6 +347,16 @@ function confirmDialog() {
     if (not_constructer.value) {
         callFunction()
     } else {
+        // Written synchronously on click, before compilation or any network
+        // round-trip, so the status box is populated immediately. This is the
+        // single funnel for both deploy paths — with and without a constructor
+        // dialog — which keeps the line from being emitted twice.
+        emitter.emit('deploy_progress',
+            '\n------------------------\n'
+            + '[Deploy] Creating contract...'
+            + '\n  Step:     6 (kContractCreate)'
+            + `\n  GasLimit: ${gas_limit.value}`
+            + `\n  Prepay:   ${gas_prefund.value}`)
         deploySolidity()
     }
 }
@@ -748,6 +770,20 @@ function deploySolidity() {
                     contractAddress.value = addr
                     emitter.emit('deploy_solidity_code_res', { status: 0, id: addr })
                     emitter.emit('deploy_progress', `[✓] Contract deployed successfully!\nAddress: ${addr}`)
+
+                    // The contract address exists as soon as the deploy tx lands,
+                    // but its account row can lag the receipt. A deploy carries no
+                    // value, so only existence is being waited on here.
+                    const acc = await waitForBalance(addr, 3, 60000, 15000,
+                        (attempt, elapsed, bal) => {
+                            emitter.emit('deploy_progress',
+                                `[${elapsed}s] Contract account: attempt ${attempt}` +
+                                (bal === null ? ' — not visible yet' : ` — balance ${bal}`))
+                        }, 0n)
+                    emitter.emit('deploy_progress',
+                        acc ? `[✓] Contract account confirmed\n  Balance: ${acc.balance}`
+                            : '[!] Contract address not queryable yet (may need a moment)')
+
                     ElMessage({ type: 'success', message: 'Contract deployed: ' + addr })
                     // Save source code and ABI to node's SQLite (separate from deploy tx)
                     const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : '[]'
@@ -1189,8 +1225,16 @@ onMounted(() => {
 
 const currentDraftName = ref('')
 
+// Set while the transfer form has replaced this editor in the pane. A transfer
+// is not a contract, so nothing may be written to localStorage or to a deployed
+// contract while it is open.
+const transfer_mode = ref(false)
+
 const TimeToSaveGraph = () => {
     var now_tm_ms = getTimestamp();
+    if (transfer_mode.value) {
+        return;
+    }
     if (prev_saved_code.value != codeValue.value && (prev_save_graph_tm_ms + 10 < now_tm_ms)) {
         prev_save_graph_tm_ms = now_tm_ms;
         prev_saved_code.value = codeValue.value

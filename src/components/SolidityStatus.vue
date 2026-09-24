@@ -1,6 +1,9 @@
 <template>
-    <div style="overflow: hidden;">
-        <el-button-group style="margin-top: 5px;">
+    <div class="solidity-status-root" style="overflow: hidden;">
+        <!-- These act on the contract in the editor, which is not on screen while
+             the transfer form has the pane. The log area below stays, so transfer
+             progress still has somewhere to print. -->
+        <el-button-group v-if="!transfer_mode" style="margin-top: 5px;">
             <!-- <el-button plain size="small" type="primary" :icon="DataAnalysis" @click="toCompile">编译</el-button> -->
             <el-button plain size="small" type="primary" :icon="Operation" :disabled="contract_address != ''" @click="toDeploy">Deploy</el-button>
 
@@ -22,7 +25,9 @@
 
         </el-button-group>
 
-        <el-tag v-if="contract_address" type="success" style="margin-top: 5px;float: right;">{{ contract_address }}</el-tag>
+        <el-tag v-if="transfer_mode" type="warning" style="margin-top: 5px;">转账模式</el-tag>
+
+        <el-tag v-if="contract_address && !transfer_mode" type="success" style="margin-top: 5px;float: right;">{{ contract_address }}</el-tag>
 
         <pre ref="logArea" id="solidity_editor_status" class="log-area" v-html="textarea"></pre>
     </div>
@@ -81,6 +86,10 @@ function styledLog(text: string): string {
         if (/^\[Preset GAS\]/.test(line))
             return `<span class="ls-gas ls-bold">${e}</span>`
 
+        // Transfer header
+        if (/^\[Transfer\]/.test(line))
+            return `<span class="ls-transfer ls-bold">${e}</span>`
+
         // Call header
         if (/^\[Call:/.test(line))
             return `<span class="ls-call ls-bold">${e}</span>`
@@ -101,9 +110,13 @@ function styledLog(text: string): string {
         if (/Deployment Success|Tx confirmed|confirmed!/.test(line))
             return `<span class="ls-ok ls-bold">${e}</span>`
 
-        // Deployment error
-        if (/Deployment Error|Compilation Error|FAILED:|Tx FAILED|Balance query error/.test(line))
+        // Deployment error / transfer failure
+        if (/Deployment Error|Compilation Error|FAILED:|Tx FAILED|Balance query error|Transfer FAILED/.test(line))
             return `<span class="ls-err ls-bold">${e}</span>`
+
+        // Balance lines
+        if (/\bBalance:/.test(line))
+            return `<span class="ls-balance">${e}</span>`
 
         // Contract address
         if (/Contract Address:/.test(line))
@@ -129,6 +142,11 @@ function appendLog(text: string) {
 const gas_visible = ref(false)
 const gas_prefund = ref(1000000)
 const gas_waiting = ref(false)
+
+// Set while the transfer form occupies the editor pane. The toolbar above acts on
+// the contract, so it is hidden rather than left to operate on something that is
+// no longer on screen.
+const transfer_mode = ref(false)
 
 const toCompile = () => {
     emitter.emit('compile_solidity_code', "");
@@ -238,13 +256,21 @@ emitter.off('deploy_progress', null);
 emitter.off('compile_solidity_code_res', null);
 emitter.off('deploy_solidity_code_res', null);
 emitter.off('call_function_solidity_code_res', null);
+emitter.off('solidity_status_log', null);
 emitter.off('update_soldity_status_height', null);
+emitter.off('transfer_mode_changed', null);
 }
 
 const emitterOn = () => {
 
 emitter.on('deploy_progress', (msg: string) => {
     appendLog('\n' + msg)
+})
+
+// Other panels (contract tree, transfer dialog) write into this log area.
+// Payload is preformatted text; prefix '\n' is added by the caller when needed.
+emitter.on('solidity_status_log', (msg: string) => {
+    if (typeof msg === 'string' && msg.length > 0) appendLog(msg)
 })
 
 emitter.on('compile_solidity_code_res', (data) => {
@@ -270,6 +296,13 @@ emitter.on('deploy_solidity_code_res', (data) => {
         appendLog(sep + 'Deployment Success!\nContract Address: ' + data.id)
     }
 });
+
+// Raised by Solidity.vue whenever the editor pane swaps between the code editor
+// and the transfer form. The log below is shared by both, so only the toolbar
+// reacts.
+emitter.on('transfer_mode_changed', (open: boolean) => {
+    transfer_mode.value = !!open
+})
 
 emitter.on('update_soldity_status_height', (height: number | string) => {
     const statusContainer = document.getElementById('solidity-status-container');
@@ -306,8 +339,8 @@ emitter.on('call_function_solidity_code_res', (data) => {
 .log-area {
     width: 100%;
     box-sizing: border-box;
-    background: #1a1a2e;
-    color: #ccc;
+    background: var(--log-bg);
+    color: var(--log-default);
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
     font-size: 12px;
     line-height: 1.6;
@@ -315,7 +348,7 @@ emitter.on('call_function_solidity_code_res', (data) => {
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
-    border: 1px solid #333;
+    border: 1px solid var(--log-border);
     border-radius: 4px;
     margin-top: 6px;
     min-height: 80px;
@@ -323,20 +356,65 @@ emitter.on('call_function_solidity_code_res', (data) => {
 </style>
 
 <style>
-/* Global so v-html inner spans can inherit these */
-.ls-sep    { color: #444; font-size: 11px; }
-.ls-ok     { color: #66bb6a; }
-.ls-err    { color: #ef5350; }
-.ls-deploy { color: #64b5f6; }
-.ls-gas    { color: #ffa726; }
-.ls-call   { color: #ce93d8; }
-.ls-poll   { color: #555; font-size: 11px; font-style: italic; }
-.ls-txhash { color: #ffd54f; font-family: monospace; font-size: 11px; }
-.ls-response { color: #ef9a9a; font-family: monospace; font-size: 11px; }
-.ls-addr   { color: #80cbc4; font-family: monospace; }
-.ls-result { color: #4dd0e1; }
-.ls-detail { color: #888; font-size: 11px; }
-.ls-default { color: #ccc; }
+/* Log syntax colours, declared as variables on the component root so the same
+   rule block serves both themes. The v-html spans are generated outside this
+   component's scope, hence a global block. */
+.solidity-status-root {
+    /* light */
+    --log-bg: #f6f8fa;
+    --log-border: #d0d7de;
+    --log-default: #24292f;
+    --log-sep: #b9c0c8;
+    --log-poll: #8b949e;
+    --log-detail: #6e7781;
+    --log-ok: #1a7f37;
+    --log-err: #cf222e;
+    --log-deploy: #0969da;
+    --log-gas: #9a6700;
+    --log-transfer: #0d7d8c;
+    --log-balance: #4a7c1f;
+    --log-call: #8250df;
+    --log-txhash: #8a6a00;
+    --log-response: #a40e26;
+    --log-addr: #116b62;
+    --log-result: #0b6f7d;
+}
+
+html.dark .solidity-status-root {
+    --log-bg: #1a1a2e;
+    --log-border: #333;
+    --log-default: #ccc;
+    --log-sep: #444;
+    --log-poll: #555;
+    --log-detail: #888;
+    --log-ok: #66bb6a;
+    --log-err: #ef5350;
+    --log-deploy: #64b5f6;
+    --log-gas: #ffa726;
+    --log-transfer: #26c6da;
+    --log-balance: #aed581;
+    --log-call: #ce93d8;
+    --log-txhash: #ffd54f;
+    --log-response: #ef9a9a;
+    --log-addr: #80cbc4;
+    --log-result: #4dd0e1;
+}
+
+.ls-sep    { color: var(--log-sep); font-size: 11px; }
+.ls-ok     { color: var(--log-ok); }
+.ls-err    { color: var(--log-err); }
+.ls-deploy { color: var(--log-deploy); }
+.ls-gas    { color: var(--log-gas); }
+.ls-transfer { color: var(--log-transfer); }
+.ls-balance { color: var(--log-balance); font-family: monospace; }
+.ls-call   { color: var(--log-call); }
+.ls-poll   { color: var(--log-poll); font-size: 11px; font-style: italic; }
+.ls-txhash { color: var(--log-txhash); font-family: monospace; font-size: 11px; }
+.ls-response { color: var(--log-response); font-family: monospace; font-size: 11px; }
+.ls-addr   { color: var(--log-addr); font-family: monospace; }
+.ls-result { color: var(--log-result); }
+.ls-detail { color: var(--log-detail); font-size: 11px; }
+.ls-default { color: var(--log-default); }
 .ls-bold   { font-weight: bold; }
 .ls-big    { font-size: 13px; }
 </style>

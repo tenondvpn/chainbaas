@@ -50,6 +50,12 @@ type EventTypes = {
   'call_function_solidity_code': {},
   'call_function_solidity_code_res': {},
   'set_solidity_private_key': {},
+  'solidity_status_log': {},
+  // Tree asks the main column to swap the code editor for the transfer form.
+  'open_transfer': {},
+  // Editor column reports whether the transfer form is showing, so the contract
+  // auto-save can stand down (a transfer is not a contract and has no draft).
+  'transfer_mode_changed': {},
   'theme_changed': {},
   'change_search_status': {},
   'change_search_owner': {},

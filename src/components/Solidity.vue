@@ -1,6 +1,7 @@
 <script lang="ts">
 import SolidityEditor from './SolidityEditor.vue';
 import SolidityStatus from './SolidityStatus.vue';
+import SolidityTransfer from './SolidityTransfer.vue';
 import emitter from './EventBus';
 import { onMounted, onBeforeUnmount } from 'vue';
 import { ref } from 'vue';
@@ -12,7 +13,8 @@ export default {
     components: {
         SolidityTree,
         SolidityEditor,
-        SolidityStatus
+        SolidityStatus,
+        SolidityTransfer
     },
 };
 </script>
@@ -70,6 +72,7 @@ const project_id = ref("68")
 const choosed_pipeline = ref(false)
 const choosed_pipeline_id = ref('')
 const dynamicMargin = ref(10000)
+const transfer_open = ref(false)
 const props = defineProps({
     show_history_graph: Boolean,
     task_info: Map,
@@ -95,12 +98,38 @@ const emitterOn = () => {
         choosed_pipeline_id.value = payload["id"]
         console.log("create pipeline: ", choosed_pipeline_id.value)
     });
+
+    // The transfer button lives on the tree root, which is clickable with no
+    // contract selected. Bring the editor column into view so the form and the
+    // status box below it are actually on screen.
+    emitter.on('open_transfer', (payload: any) => {
+        transfer_open.value = !!(payload && payload.open)
+        emitter.emit('transfer_mode_changed', transfer_open.value)
+        if (transfer_open.value) {
+            choosed_pipeline.value = true
+            dynamicMargin.value = 0
+            nextTick(() => winHandleResize())
+        }
+    });
+
+    // Every way of opening a contract — new, draft, on-chain, from the tree or
+    // the history list — funnels through update_graph. Leaving transfer mode
+    // here means whatever is opening gets the editor pane back, rather than
+    // being loaded behind a form that stays on screen.
+    emitter.on('update_graph', () => {
+        if (transfer_open.value) {
+            transfer_open.value = false
+            emitter.emit('transfer_mode_changed', false)
+        }
+    });
 }
 
 const emitterOff = () => {
     emitter.off('show_update_graph', null);
     emitter.off('success_delete_pipeline', null);
     emitter.off('success_create_pipeline', null);
+    emitter.off('open_transfer', null);
+    emitter.off('update_graph', null);
 }
 
 
@@ -194,7 +223,13 @@ const update_graph = (data) => {
                                     <div :style="`height: ${dynamicTreeHeight}px;box-shadow: var(--el-border-color-light) 0px 0px 10px;margin-top: ${dynamicMargin}px`">
                                         <el-splitter layout="vertical" @resize="handleResize" style="height: 100%;">
                                             <el-splitter-panel size="81%" ref="solidity_editor">
-                                                <SolidityEditor />
+                                                <!-- The editor stays mounted and is only hidden: tearing
+                                                     it down would discard the CodeMirror state and re-run
+                                                     its setup every time the transfer form is opened. -->
+                                                <div v-show="!transfer_open" style="height: 100%;">
+                                                    <SolidityEditor />
+                                                </div>
+                                                <SolidityTransfer v-if="transfer_open" />
                                             </el-splitter-panel>
                                             <el-splitter-panel size="29%" ref="solidity_status">
                                                 <SolidityStatus />

@@ -51,7 +51,7 @@ export function calcCreateAddress(senderHex: string, nonce: number): string {
 
 // Shard IDs on the network (2-6, i.e. 5 shards × 4 nodes each)
 export const SHARDS = [2, 3, 4, 5, 6]
-const DEFAULT_SHARD = 3
+export const DEFAULT_SHARD = 3
 
 function shardUrl(shardId: number): string {
     return `/api/shard${shardId}/`
@@ -133,6 +133,71 @@ export async function queryAccountOnShard(address: string, shardId: number): Pro
         }
     } catch (_) {}
     return null
+}
+
+/**
+ * Wait for an account to show up with a credited balance.
+ *
+ * A freshly-created recipient has no row in the node's account table until the
+ * tx that credits it is committed, so an immediate lookup after the receipt is
+ * final can still miss.
+ *
+ * Defaults: 60s total, one attempt every 15s — 4 tries. The first attempt runs
+ * immediately, so an already-credited account costs one round-trip.
+ *
+ * `maxAttempts` caps the probe count independently of the clock. The two limits
+ * differ: N attempts at an interval of I occupy N-1 gaps, so 6 tries 5s apart is
+ * 25s of wall-clock, not 30s. Callers that think in "how many times should we
+ * look" (rather than "how long should we wait") should set the attempt count and
+ * leave the timeout as a backstop. Default of 0 means unlimited, i.e. the
+ * timeout alone bounds the loop.
+ *
+ * `minBalance` defaults to 1, i.e. "wait until credited". Pass 0 for cases where
+ * mere existence is the interesting part (e.g. a contract address that was
+ * deployed without an initial value), otherwise the full budget is spent on a
+ * balance that is legitimately zero.
+ *
+ * `stopWhenCredited` (default true) short-circuits on the first reading at or
+ * above `minBalance`. Pass false to run every attempt to completion — the caller
+ * wants the final reading rather than the first good one — in which case
+ * `minBalance` no longer decides anything, and `maxAttempts` is what bounds the
+ * sweep.
+ *
+ * Returns the last AccountInfo seen, or null if the account never appeared.
+ */
+export async function waitForBalance(
+    address: string,
+    shardId: number,
+    timeoutMs = 60000,
+    intervalMs = 15000,
+    onProgress?: (attempt: number, elapsedSec: number, balance: string | null) => void,
+    minBalance = 1n,
+    maxAttempts = 0,
+    stopWhenCredited = true,
+): Promise<AccountInfo | null> {
+    const start = Date.now()
+    let attempt = 0
+    let last: AccountInfo | null = null
+    while (true) {
+        attempt++
+        try {
+            const acc = await queryAccountOnShard(address, shardId)
+            if (acc) {
+                last = acc
+                const elapsed = Math.round((Date.now() - start) / 1000)
+                onProgress?.(attempt, elapsed, acc.balance)
+                if (stopWhenCredited && BigInt(acc.balance ?? '0') >= minBalance) return acc
+            } else {
+                onProgress?.(attempt, Math.round((Date.now() - start) / 1000), null)
+            }
+        } catch (_) {
+            onProgress?.(attempt, Math.round((Date.now() - start) / 1000), null)
+        }
+        if (maxAttempts > 0 && attempt >= maxAttempts) break
+        if (Date.now() - start + intervalMs > timeoutMs) break
+        await new Promise(r => setTimeout(r, intervalMs))
+    }
+    return last
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -412,6 +477,59 @@ export async function getAllAccounts(
         }
     } catch (_) {}
     return null
+}
+
+export interface SearchHit {
+    address: string
+    balance: string
+    nonce: string
+    shard_id: number
+    pool_index: number
+    type: number
+    is_contract: boolean
+    tx_count: number
+    last_seen: number
+    exact: boolean
+    _id: number
+}
+
+/**
+ * Prefix search over the explorer's `addresses` table.
+ *
+ * The node matches on the full stored hex string, which is 40 chars for a normal
+ * account/contract and 80 chars for a contract gas-prefund address. A prefix
+ * shorter than 40 hex chars therefore needs no server round-trip — it can only
+ * match within the 20-byte address space, so callers gate on that.
+ *
+ * `q` may carry a `0x` prefix and any case; the node normalises both.
+ * Returns [] when no shard answers.
+ */
+export async function explorerSearch(
+    q: string,
+    limit = 50,
+    shardId = DEFAULT_SHARD,
+): Promise<SearchHit[]> {
+    const hex = q.toLowerCase().replace(/^0x/, '')
+    if (!hex) return []
+    try {
+        const data = await get<any>(shardId, 'explorer/search', { q: hex, limit })
+        if (data && data.code === 0 && Array.isArray(data.data)) {
+            return (data.data as any[]).map(a => ({
+                address:     a.addr ?? '',
+                balance:     String(a.balance ?? 0),
+                nonce:       String(a.nonce ?? 0),
+                shard_id:    a.shard_id ?? shardId,
+                pool_index:  a.pool_index ?? 0,
+                type:        a.addr_type ?? 0,
+                is_contract: !!a.is_contract,
+                tx_count:    a.tx_count ?? 0,
+                last_seen:   a.last_seen ?? 0,
+                exact:       !!a.exact,
+                _id:         a.id,
+            }))
+        }
+    } catch (_) {}
+    return []
 }
 
 export async function explorerGetBlock(hash: string, shardId: number): Promise<any | null> {
@@ -894,7 +1012,7 @@ export async function callContractWrite(
         shardId: opts.shardId,
         step: 8,   // kContractExcute
         input: opts.inputHex,
-        prepay: opts.prepay ?? opts.gasLimit ?? 9999999999,  // prepay drives actual execution gas from prefund
+        prepay: opts.prepay ?? opts.gasLimit ?? 999999,  // prepay drives actual execution gas from prefund
         gasLimit: opts.gasLimit,
     })
 }
