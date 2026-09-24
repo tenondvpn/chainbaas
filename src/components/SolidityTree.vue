@@ -1,38 +1,50 @@
 <template>
-    <!-- Search input. Doubles as the address lookup: a bare hex string of 40+
-         chars (0x optional) is looked up in the explorer's address table as a
-         prefix. Shorter input just filters the tree locally. -->
-    <el-popover :visible="results_visible" placement="bottom-start" :width="560" trigger="manual"
-        popper-class="addr-search-popper">
-        <div v-if="searching" style="padding: 4px 2px; font-size: 12px; color: #888;">Searching...</div>
-        <div v-else-if="hits.length === 0" style="padding: 4px 2px; font-size: 12px; color: #888;">
-            No address matched {{ normalisedQuery }}...
-        </div>
-        <template v-else>
-            <div v-for="hit in hits" :key="hit.address" class="hit-row">
-                <div class="hit-main">
-                    <span class="hit-addr">{{ hit.address }}</span>
-                    <el-tag :type="hit.is_contract ? 'success' : 'info'" size="small" effect="plain">
-                        {{ hit.is_contract ? '合约' : addressKind(hit) }}
-                    </el-tag>
-                </div>
-                <div class="hit-detail">
-                    {{ addrHexLen(hit.address) > 40 ? `prefund (to+from, ${addrHexLen(hit.address) / 2} bytes)` : 'shard ' + hit.shard_id }}
-                    <template v-if="hit.pool_index >= 0"> · pool {{ hit.pool_index }}</template>
-                    · balance {{ hit.balance }} · nonce {{ hit.nonce }} · {{ hit.tx_count }} txs
-                </div>
-                <div class="hit-actions">
-                    <el-button link type="primary" size="small" @click="useAddress(hit.address, hit.shard_id)">填入</el-button>
-                    <el-button link size="small" @click="copyAddress(hit.address)">复制</el-button>
-                </div>
+    <!-- Search box and the two primary actions share one row: the actions sit
+         inline after the input rather than on the 链上合约 tree root, so they are
+         reachable without scrolling to or expanding it. Icon-only with tooltips
+         — the labels were wider than the input's own text area. -->
+    <div class="tree-search-row">
+        <el-popover :visible="results_visible" placement="bottom-start" :width="560" trigger="manual"
+            popper-class="addr-search-popper">
+            <div v-if="searching" style="padding: 4px 2px; font-size: 12px; color: #888;">Searching...</div>
+            <div v-else-if="hits.length === 0" style="padding: 4px 2px; font-size: 12px; color: #888;">
+                No address matched {{ normalisedQuery }}...
             </div>
-        </template>
-        <template #reference>
-            <el-input class="esponsive-input" v-model="query" :prefix-icon="Search"
-                :placeholder="'搜索合约 / 账户 / prefund 地址（≥40位hex前缀）或合约名'"
-                @input="onQueryChanged" @keyup.enter="onQueryEnter" @clear="results_visible = false" clearable />
-        </template>
-    </el-popover>
+            <template v-else>
+                <div v-for="hit in hits" :key="hit.address" class="hit-row">
+                    <div class="hit-main">
+                        <span class="hit-addr">{{ hit.address }}</span>
+                        <el-tag :type="hit.is_contract ? 'success' : 'info'" size="small" effect="plain">
+                            {{ hit.is_contract ? '合约' : addressKind(hit) }}
+                        </el-tag>
+                    </div>
+                    <div class="hit-detail">
+                        {{ addrHexLen(hit.address) > 40 ? `prefund (to+from, ${addrHexLen(hit.address) / 2} bytes)` : 'shard ' + hit.shard_id }}
+                        <template v-if="hit.pool_index >= 0"> · pool {{ hit.pool_index }}</template>
+                        · balance {{ hit.balance }} · nonce {{ hit.nonce }} · {{ hit.tx_count }} txs
+                    </div>
+                    <div class="hit-actions">
+                        <el-button link type="primary" size="small" @click="useAddress(hit.address, hit.shard_id)">填入</el-button>
+                        <el-button link size="small" @click="copyAddress(hit.address)">复制</el-button>
+                    </div>
+                </div>
+            </template>
+            <template #reference>
+                <el-input class="esponsive-input" v-model="query" :prefix-icon="Search"
+                    :placeholder="'搜索合约 / 账户 / prefund 地址（≥40位hex前缀）或合约名'"
+                    @input="onQueryChanged" @keyup.enter="onQueryEnter" @clear="results_visible = false" clearable />
+            </template>
+        </el-popover>
+
+        <el-tooltip class="box-item" effect="dark" content="新建合约" placement="bottom">
+            <el-button plain type="success" size="small" :icon="DocumentAdd"
+                @click="addPipelineClicked(null)" />
+        </el-tooltip>
+        <el-tooltip class="box-item" effect="dark" content="转账" placement="bottom">
+            <el-button plain type="warning" size="small" :icon="Switch"
+                @click="openTransfer(null)" />
+        </el-tooltip>
+    </div>
 
     <div :class="{ appContainerDark: isDark, appContainerLight: !isDark }" :style="`min-height: ${dynamicTreeHeight}px;`">
         <div class="tree-container" ref="treeContainerRef">
@@ -62,14 +74,6 @@
                         <div v-if="node.data.is_project">
                             <span class="node-buttons">
                                 <el-button-group class="ml-4">
-                                    <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="新建合约">
-                                        <el-button plain type="success" size="small" :icon="Plus"
-                                            @click.stop="addPipelineClicked(node)" />
-                                    </el-tooltip>
-                                    <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="转账">
-                                        <el-button plain type="warning" size="small" :icon="Promotion"
-                                            @click.stop="openTransfer(node)" />
-                                    </el-tooltip>
                                     <el-tooltip v-if="node.data.id === 'chain-root'" class="box-item" effect="dark" content="刷新列表">
                                         <el-button plain type="primary" size="small" :icon="Refresh"
                                             @click.stop="GetProjectsAndPipelines()" />
@@ -125,7 +129,7 @@
 
 <script lang="ts" setup>
 import { ref, computed, onMounted, onBeforeUnmount, h, nextTick } from 'vue';
-import { Plus, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument, Refresh, Promotion } from '@element-plus/icons-vue'
+import { DocumentAdd, Switch, Edit, Delete, Search, Folder, SetUp, Fold, Expand, CopyDocument, Refresh } from '@element-plus/icons-vue'
 import type { TreeNodeData } from 'element-plus'
 import { useDark } from "@vueuse/core";
 import axios from 'axios';
@@ -1021,6 +1025,37 @@ const appendNode = (parentId, item, autoSelect = true) => {
 .responsive-input {
     width: 240px;
 }
+
+/* Search input and the icon buttons on one line, vertically centred. The input
+   keeps its fixed width; the buttons take the remaining space at its right. */
+.tree-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+/* Specificity matters here. Element Plus ships `.el-input { width: var(--el-input-width) }`
+   with `--el-input-width: 100%`, emitted *after* this component's
+   `.esponsive-input { width: 240px }`. Both are single-class selectors, so source
+   order decides and the library rule wins: the input stretched to the full pane
+   width and pushed both buttons past its right edge, where the pane's
+   `overflow: hidden` clipped them away entirely.
+   The child combinator adds one class of specificity, beating `.el-input`
+   regardless of order.
+   `flex: 0 1 auto` + `min-width: 0` keeps the 240px width while there is room and
+   lets the input shrink instead of overflowing when the pane is narrow — a fixed
+   `flex: 0 0 auto` would push the buttons out again below ~730px viewport width,
+   which is what the 768px media rule below used to paper over. */
+.tree-search-row > .el-input.esponsive-input {
+    width: 240px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.tree-search-row > button.el-button {
+    flex: 0 0 auto;
+}
 </style>
 
 <style>
@@ -1065,15 +1100,9 @@ const appendNode = (parentId, item, autoSelect = true) => {
 }
 
 
-@media (max-width: 768px) {
-    .input-container {
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .esponsive-input,
-    .responsive-input {
-        width: 100%;
-    }
-}
+/* The old `@media (max-width: 768px) { .esponsive-input { width: 100% } }` block
+   is gone: it set a width that no element consumed (nothing in this component
+   carries `.input-container` or `.responsive-input`), and its `width: 100%` on
+   the search input was the same overflow bug at small viewports. The flex rule
+   above now handles every width. */
 </style>

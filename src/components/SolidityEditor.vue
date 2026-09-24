@@ -589,7 +589,12 @@ async function callFunction() {
                 .then(result => {
                     run_loading.value = false
                     if (!result.ok) {
-                        emitter.emit('deploy_progress', `\n[✗] ${form.function} failed: ${result.msg}`)
+                        // A reverted view call comes back as an ABI-encoded error
+                        // string, already decoded into result.msg. Keep the raw
+                        // packet in the log too — it is the only record of what
+                        // the node actually sent.
+                        const raw = result.errorBody ? `\n  Raw: ${result.errorBody}` : ''
+                        emitter.emit('deploy_progress', `\n[✗] ${form.function} failed: ${result.msg}${raw}`)
                         emitter.emit('call_function_solidity_code_res', { status: 1, funcName: form.function, msg: result.msg })
                         ElMessage({ type: 'error', message: 'Function call failed: ' + result.msg })
                         return

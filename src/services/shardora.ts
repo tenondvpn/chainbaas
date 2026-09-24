@@ -1046,6 +1046,35 @@ export async function compileSolidity(
     }
 }
 
+// The node signals a failed view call, not with an HTTP error, but by
+// hex-encoding an ABI `string` into the body and prefixing it with "0x":
+//   [0:32] offset (always 0x20) | [32:64] length | [64:] utf-8 payload
+// A successful call is returned as bare hex with no prefix (http_handler.cc
+// AbiQueryContract). So the prefix alone distinguishes the two, and the only
+// way to read the failure text is to decode that ABI string back out.
+function decodeEvmErrorHex(body: string): string | null {
+    try {
+        const hex = body.replace(/^0x/, '')
+        if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length < 128) return null
+        const offset = parseInt(hex.slice(0, 64), 16) * 2
+        if (!Number.isFinite(offset) || offset + 64 > hex.length) return null
+        const len = parseInt(hex.slice(offset, offset + 64), 16) * 2
+        if (!Number.isFinite(len) || len <= 0 || offset + 64 + len > hex.length) return null
+        // The length field counts bytes, not characters, so the payload must be
+        // read as bytes and decoded as utf-8 — non-ASCII error text otherwise
+        // comes out truncated at the first multi-byte character.
+        const bytes = hex.slice(offset + 64, offset + 64 + len)
+        const buf = new Uint8Array(bytes.length / 2)
+        for (let i = 0; i < buf.length; i++) {
+            buf[i] = parseInt(bytes.slice(i * 2, i * 2 + 2), 16)
+        }
+        const decoded = new TextDecoder('utf-8').decode(buf)
+        return decoded || null
+    } catch (_) {
+        return null
+    }
+}
+
 // Call a view (read-only) contract function via /abi_query_contract.
 // inputHex: ABI-encoded function call as a hex string (no 0x prefix).
 // fromHex:  caller address hex (optional, uses zero address if omitted).
@@ -1055,7 +1084,7 @@ export async function abiQueryContract(
     contractAddr: string,
     inputHex: string,
     fromHex = '0000000000000000000000000000000000000000',
-): Promise<{ ok: boolean; outputHex: string; msg?: string }> {
+): Promise<{ ok: boolean; outputHex: string; msg?: string; errorBody?: string }> {
     try {
         const addr = contractAddr.toLowerCase().replace(/^0x/, '')
         const from = fromHex.toLowerCase().replace(/^0x/, '')
@@ -1064,9 +1093,22 @@ export async function abiQueryContract(
             input: inputHex,
             from,
         })
-        // Node returns plain hex text on success, or JSON error
         if (typeof resp === 'string' && !resp.startsWith('{')) {
-            return { ok: true, outputHex: resp }
+            const text = resp.trim()
+            // "0x" marks a reverted / failed call. Decode the ABI string so the
+            // caller sees the reason rather than feeding the blob to the ABI
+            // decoder, which would "succeed" against the wrong signature and
+            // print garbage values.
+            if (text.startsWith('0x') || text.startsWith('0X')) {
+                const decoded = decodeEvmErrorHex(text)
+                return {
+                    ok: false,
+                    outputHex: '',
+                    msg: decoded ?? '合约调用失败（节点返回无法解码的错误包）',
+                    errorBody: text,
+                }
+            }
+            return { ok: true, outputHex: text }
         }
         if (resp?.status === 0 || resp?.code === 0) {
             return { ok: true, outputHex: resp.output ?? resp.data ?? '' }
