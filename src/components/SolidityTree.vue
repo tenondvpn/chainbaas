@@ -657,7 +657,12 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
         // to use the shard it came from. Recording it here is what keeps call and
         // query pointed at the right one after a cross-shard click — the shard is
         // a property of the contract, not of whichever account happens to sign.
-        const contractShard = Number(contract?.shard_id ?? selectedShard.value)
+        //
+        // A falsy shard_id means the row carries no usable shard: the explorer DB
+        // defaults the column to 0, and the source-code upsert after a deploy
+        // inserts without it, so 0 is a real value that reaches here. `??` would
+        // pass that 0 straight through, so the check is on truthiness.
+        const contractShard = Number(contract?.shard_id) || selectedShard.value
         if (contract?.addr) rememberContractShard(contract.addr, contractShard)
         // Fetch full detail if source_code not yet loaded
         if (contract && !contract._detail_loaded) {
@@ -705,18 +710,27 @@ const GetProjectsAndPipelines = async () => {
                 : Array.isArray(resp?.items) ? resp.items
                 : Array.isArray(resp?.data?.items) ? resp.data.items
                 : []
-            return items.map(c => ({ ...c, shard_id: c.shard_id ?? s }))
+            // A 0 from the node is the column default, not a shard, so it falls
+            // back to the shard the list was fetched from. `??` would let it
+            // through and every action on that node would target shard 0.
+            return items.map(c => ({ ...c, shard_id: Number(c.shard_id) || s }))
         })
     )
 
-    for (const outcome of perShard) {
+    for (let i = 0; i < perShard.length; i++) {
+        const outcome = perShard[i]
+        const shardOfOutcome = SHARDS[i]
         if (outcome.status !== 'fulfilled') {
             console.warn('Failed to load contracts from a shard:', outcome.reason)
             continue
         }
         for (const contract of outcome.value) {
             const addr: string = contract.addr ?? ''
-            const shard = Number(contract.shard_id)
+            // Fall back to the shard this list came from when the row has no
+            // usable shard_id: the column defaults to 0 and an upsert can insert
+            // before sync fills it in, so 0 is a value that actually shows up.
+            // A node id carrying 0 would send every later action to shard 0.
+            const shard = Number(contract.shard_id) || shardOfOutcome
             // Node id is shard-qualified: the same address can exist on several
             // shards, and a bare `contract-${addr}` would make the later shard
             // silently overwrite the earlier node's map entry.

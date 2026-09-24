@@ -60,7 +60,16 @@ export const SHARDS = [3, 4, 5, 6]
 export const DEFAULT_SHARD = 3
 export const ROOT_SHARD = 2
 
+// Last-resort guard: a shard id that is not a live consensus shard produces a
+// request URL nginx has no location for, which serves the SPA index.html with
+// a 200 — a silent, empty success rather than a visible error. 0 is the usual
+// culprit (the explorer DB defaults contracts.shard_id to 0), so it is caught
+// here as well as at the call sites that resolve a contract's shard.
 function shardUrl(shardId: number): string {
+    if (!SHARDS.includes(shardId)) {
+        console.warn(`Invalid shard id ${shardId}, falling back to shard ${DEFAULT_SHARD}`)
+        shardId = DEFAULT_SHARD
+    }
     return `/api/shard${shardId}/`
 }
 
@@ -1201,6 +1210,9 @@ export async function updateContract(
     try {
         const data = await post<any>(shardId, 'explorer/contract/update', {
             addr: addr.toLowerCase().replace(/^0x/, ''),
+            // Sent so a first insert records the real shard. Without it the row
+            // takes the column default of 0, which no shard query can reach.
+            shard_id: shardId,
             source_code: sourceCode,
             abi,
             bytecode,
