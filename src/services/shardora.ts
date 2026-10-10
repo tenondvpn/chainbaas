@@ -60,16 +60,20 @@ export const SHARDS = [3, 4, 5, 6]
 export const DEFAULT_SHARD = 3
 export const ROOT_SHARD = 2
 
-// Last-resort guard: a shard id that is not a live consensus shard produces a
-// request URL nginx has no location for, which serves the SPA index.html with
-// a 200 — a silent, empty success rather than a visible error. 0 is the usual
-// culprit (the explorer DB defaults contracts.shard_id to 0), so it is caught
-// here as well as at the call sites that resolve a contract's shard.
+// Read-only shard set: the consensus shards plus the root congress network.
+//
+// The root shard carries no user transactions, so it must never appear in
+// SHARDS — that set gates sending, account ownership and tx lookup, and a
+// probe of the root shard answers for accounts it merely caches, with a stale
+// nonce. It does serve a full explorer API for its own blocks and system
+// transactions, so browsing it is fine and it is offered here instead.
+export const VIEW_SHARDS = [ROOT_SHARD, ...SHARDS]
+
+export function isRootShard(shardId: number): boolean {
+    return shardId === ROOT_SHARD
+}
+
 function shardUrl(shardId: number): string {
-    if (!SHARDS.includes(shardId)) {
-        console.warn(`Invalid shard id ${shardId}, falling back to shard ${DEFAULT_SHARD}`)
-        shardId = DEFAULT_SHARD
-    }
     return `/api/shard${shardId}/`
 }
 
@@ -707,6 +711,9 @@ export interface NetworkTxItem {
     addresses: any[]
     kvChanges: any[]
     blockRef: any
+    /** Present when the row came from blockInfo.txList rather than addressArray.
+     *  Carries the real tx fields (from/to/amount/txHash/step/status). */
+    tx?: any
 }
 
 export async function getNetworkActivity(shardId = DEFAULT_SHARD, maxItems = 40): Promise<NetworkActivityItem[]> {
@@ -731,54 +738,87 @@ export async function getNetworkActivity(shardId = DEFAULT_SHARD, maxItems = 40)
     return items.sort((a, b) => parseInt(b.height) - parseInt(a.height)).slice(0, maxItems)
 }
 
-export async function getNetworkTransactions(shardId = DEFAULT_SHARD, maxItems = 40): Promise<NetworkTxItem[]> {
-    const blocks = await getLatestNetworkBlocks(shardId, 15)
+/** Group one block's data into per-transaction rows. Exported so callers that
+ *  already hold blocks (a pool-scoped view, say) reuse the same rule instead of
+ *  reimplementing it. */
+export function txsFromBlocks(blocks: any[], fallbackShard = DEFAULT_SHARD): NetworkTxItem[] {
     const items: NetworkTxItem[] = []
 
     for (const block of blocks) {
         const bi = block.blockInfo
+        const blockStart = items.length
         const addrs = getBlockAddrs(block)
         const kvs: any[] = block.keyValueArray ?? block.blockInfo?.keyValueArray ?? []
-        const map = new Map<number, NetworkTxItem>()
 
+        // addressArray entries reference their transaction by txIndex; group the
+        // account diffs so whichever transaction source we use below can carry them.
+        const byTx = new Map<number, any[]>()
         for (const a of addrs) {
             const addr = b64ToAddr(a.addr ?? '')
             if (!addr || addr === '0'.repeat(40)) continue
             const idx = typeof a.txIndex === 'number' ? a.txIndex : (parseInt(a.txIndex ?? '0') || 0)
-            if (!map.has(idx)) {
-                map.set(idx, {
+            if (!byTx.has(idx)) byTx.set(idx, [])
+            byTx.get(idx)!.push(a)
+        }
+
+        // blockInfo.txList is the block's actual transaction list — from, to,
+        // amount, txHash, step, status. Prefer it. Its entries carry no txIndex,
+        // so their position is the index. addressArray alone cannot be the
+        // primary source: it is only an account-state diff and is empty on
+        // blocks whose transactions touch no account, such as the consensus-only
+        // blocks on the root shard.
+        const txList: any[] = block.txList ?? bi?.txList ?? []
+        if (txList.length) {
+            txList.forEach((t: any, i: number) => {
+                const txAddrs = byTx.get(i) ?? []
+                items.push({
                     height: bi?.height ?? '0',
                     poolIndex: block.poolIndex,
-                    shardId: block.shardId ?? shardId,
+                    shardId: block.shardId ?? fallbackShard,
+                    timestamp: bi?.timestamp ?? '0',
+                    txIndex: i,
+                    addrCount: txAddrs.length,
+                    addresses: txAddrs,
+                    kvChanges: [],
+                    blockRef: block,
+                    tx: t,
+                })
+            })
+        } else {
+            for (const [idx, txAddrs] of byTx) {
+                items.push({
+                    height: bi?.height ?? '0',
+                    poolIndex: block.poolIndex,
+                    shardId: block.shardId ?? fallbackShard,
                     timestamp: bi?.timestamp ?? '0',
                     txIndex: idx,
-                    addrCount: 0,
-                    addresses: [],
+                    addrCount: txAddrs.length,
+                    addresses: txAddrs,
                     kvChanges: [],
                     blockRef: block,
                 })
             }
-            const item = map.get(idx)!
-            item.addresses.push(a)
-            item.addrCount++
         }
 
+        // Attach the key/value writes to whichever row holds the matching account.
+        const blockItems = items.slice(blockStart)
         for (const kv of kvs) {
             const kvAddr = b64ToAddr(kv.addr ?? '')
-            for (const item of map.values()) {
+            for (const item of blockItems) {
                 if (item.addresses.some((a: any) => b64ToAddr(a.addr) === kvAddr)) {
                     item.kvChanges.push(kv)
                     break
                 }
             }
         }
-
-        items.push(...map.values())
     }
 
-    return items
-        .sort((a, b) => parseInt(b.height) - parseInt(a.height) || b.txIndex - a.txIndex)
-        .slice(0, maxItems)
+    return items.sort((a, b) => parseInt(b.height) - parseInt(a.height) || b.txIndex - a.txIndex)
+}
+
+export async function getNetworkTransactions(shardId = DEFAULT_SHARD, maxItems = 40): Promise<NetworkTxItem[]> {
+    const blocks = await getLatestNetworkBlocks(shardId, 15)
+    return txsFromBlocks(blocks, shardId).slice(0, maxItems)
 }
 
 export async function getLatestNetworkTxs(limit = 20): Promise<TxItem[]> {
@@ -805,8 +845,11 @@ export interface ShardStatus {
     responseMs?: number
 }
 
+/** Which shards are reachable, including the root congress network. The root
+ *  shard answers the same ping, so it appears alongside 3-6 and a caller that
+ *  only cares about tx shards filters on SHARDS. */
 export async function checkNetworkStatus(): Promise<ShardStatus[]> {
-    return Promise.all(SHARDS.map(async (shard) => {
+    return Promise.all(VIEW_SHARDS.map(async (shard) => {
         const t0 = Date.now()
         try {
             // Use batch_query with a dummy address to ping the shard
@@ -1210,9 +1253,6 @@ export async function updateContract(
     try {
         const data = await post<any>(shardId, 'explorer/contract/update', {
             addr: addr.toLowerCase().replace(/^0x/, ''),
-            // Sent so a first insert records the real shard. Without it the row
-            // takes the column default of 0, which no shard query can reach.
-            shard_id: shardId,
             source_code: sourceCode,
             abi,
             bytecode,
