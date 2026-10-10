@@ -26,11 +26,13 @@
             <el-form @submit.prevent="search" style="margin:12px 0 8px">
                 <el-input v-model="query" placeholder="搜索地址 / 区块Hash / 交易Hash" size="large" clearable @keyup.enter="search">
                     <template #prepend>
-                        <!-- Shard 2 is the root congress network and owns no
-                             normal accounts, so it is not offered here. -->
-                        <el-select v-model="selectedShard" style="width:110px">
+                        <!-- Shard 2 is the root congress network: it owns no
+                             normal accounts, so an address search will not
+                             resolve there, but its own blocks and system
+                             transactions are queryable. -->
+                        <el-select v-model="selectedShard" style="width:130px">
                             <el-option label="Auto (all)" value="auto" />
-                            <el-option v-for="s in SHARDS" :key="s" :label="`Shard ${s}`" :value="s" />
+                            <el-option v-for="s in VIEW_SHARDS" :key="s" :label="`Shard ${s}${s === ROOT_SHARD ? ' (root)' : ''}`" :value="s" />
                         </el-select>
                     </template>
                     <template #append>
@@ -44,7 +46,9 @@
             <div class="shard-view-row">
                 <span class="shard-view-label">分片：</span>
                 <el-radio-group v-model="viewShard" size="small" @change="onViewShardChange">
-                    <el-radio-button v-for="s in [2,3,4,5,6]" :key="s" :value="s">Shard {{ s }}</el-radio-button>
+                    <el-radio-button v-for="s in VIEW_SHARDS" :key="s" :value="s">
+                        Shard {{ s }}{{ s === ROOT_SHARD ? ' (root)' : '' }}
+                    </el-radio-button>
                 </el-radio-group>
                 <span class="shard-view-label" style="margin-left:16px">Pool：</span>
                 <el-select v-model="viewPool" placeholder="全部" clearable size="small"
@@ -110,9 +114,22 @@
                         <el-table-column label="高度" prop="height" width="68" />
                         <el-table-column label="Pool" prop="poolIndex" width="50" />
                         <el-table-column label="TxIdx" prop="txIndex" width="55" />
-                        <el-table-column label="地址数" width="60">
+                        <el-table-column label="交易" min-width="230">
                             <template #default="{ row }">
-                                <el-tag size="small" type="primary">{{ row.addrCount }}</el-tag>
+                                <template v-if="row.tx">
+                                    <!-- System transactions on the root shard carry no sender. -->
+                                    <span v-if="row.tx.from" class="mono" style="font-size:12px">
+                                        {{ shortAddr(b64ToAddrLocal(row.tx.from)) }} →
+                                    </span>
+                                    <span class="mono" style="font-size:12px">
+                                        {{ shortAddr(b64ToAddrLocal(row.tx.to)) }}
+                                    </span>
+                                    <el-tag size="small" type="warning" style="margin-left:6px">{{ row.tx.step }}</el-tag>
+                                    <span v-if="row.tx.amount && row.tx.amount !== '0'" class="text-muted" style="margin-left:6px">
+                                        {{ row.tx.amount }}
+                                    </span>
+                                </template>
+                                <el-tag v-else size="small" type="primary">地址数 {{ row.addrCount }}</el-tag>
                             </template>
                         </el-table-column>
                         <el-table-column label="时间" min-width="100">
@@ -577,8 +594,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import {
     queryAccount, queryAccountOnShard, queryAccountTxsOnShard,
-    checkNetworkStatus, GENESIS_ACCOUNTS, SHARDS,
-    getLatestNetworkBlocks, getNetworkTransactions,
+    checkNetworkStatus, GENESIS_ACCOUNTS, VIEW_SHARDS, ROOT_SHARD,
+    getLatestNetworkBlocks, getNetworkTransactions, txsFromBlocks,
     getLatestPoolInfo, getBlocks,
     getAllAccounts, explorerGetBlock, explorerGetTx,
     explorerGetContracts, explorerGetContractTxs,
@@ -696,6 +713,18 @@ function b64ToAddrLocal(b64: string): string {
     }
 }
 
+/** 32-byte hashes arrive base64 too; render them as hex. */
+function b64HashToHex(b64: string): string {
+    if (!b64) return ''
+    try {
+        const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'))
+        return Array.from(bin, (c: string) => c.charCodeAt(0))
+            .map((n: number) => n.toString(16).padStart(2, '0')).join('')
+    } catch {
+        return b64
+    }
+}
+
 function b64ToHex(b64: string | undefined): string {
     if (!b64) return ''
     try {
@@ -805,45 +834,7 @@ async function loadNetworkActivity() {
 }
 
 function extractTxsFromBlocks(blocks: any[]): NetworkTxItem[] {
-    const items: NetworkTxItem[] = []
-    for (const block of blocks) {
-        const bi = block.blockInfo
-        const addrs = getBlockAddrsLocal(block)
-        const kvs = getBlockKVLocal(block)
-        const map = new Map<number, NetworkTxItem>()
-        for (const a of addrs) {
-            const addr = b64ToAddrLocal(a.addr ?? '')
-            if (!addr || addr === '0'.repeat(40)) continue
-            const idx = typeof a.txIndex === 'number' ? a.txIndex : (parseInt(a.txIndex ?? '0') || 0)
-            if (!map.has(idx)) {
-                map.set(idx, {
-                    height: bi?.height ?? '0',
-                    poolIndex: block.poolIndex ?? viewPool.value ?? 0,
-                    shardId: block.shardId ?? viewShard.value,
-                    timestamp: bi?.timestamp ?? '0',
-                    txIndex: idx,
-                    addrCount: 0,
-                    addresses: [],
-                    kvChanges: [],
-                    blockRef: block,
-                })
-            }
-            const item = map.get(idx)!
-            item.addresses.push(a)
-            item.addrCount++
-        }
-        for (const kv of kvs) {
-            const kvAddr = b64ToAddrLocal(kv.addr ?? '')
-            for (const item of map.values()) {
-                if (item.addresses.some((a: any) => b64ToAddrLocal(a.addr) === kvAddr)) {
-                    item.kvChanges.push(kv)
-                    break
-                }
-            }
-        }
-        items.push(...map.values())
-    }
-    return items.sort((a, b) => parseInt(b.height) - parseInt(a.height) || b.txIndex - a.txIndex)
+    return txsFromBlocks(blocks, viewShard.value)
 }
 
 async function onViewShardChange() {
@@ -993,14 +984,57 @@ async function openNetworkTxDrawer(item: NetworkTxItem) {
     // Wrap the networkTxItem's data into the same shape openTxGroupDrawer expects
     selectedBlock.value = item.blockRef
     const group = { txIndex: item.txIndex, addresses: item.addresses, kvChanges: item.kvChanges }
-    await openTxGroupDrawer(group)
+    await openTxGroupDrawer(group, item.tx)
+}
+
+/** blockInfo.txList entries already carry every field the drawer needs except
+ *  `balance`, which lives on the matching addressArray row. */
+function txItemFromBlockTx(t: any, ctx: NetworkTxItem): TxItem {
+    // txList and addressArray both encode addresses as base64, so decode before
+    // comparing rather than matching the raw strings.
+    const from = b64ToAddrLocal(String(t.from ?? ''))
+    const to = b64ToAddrLocal(String(t.to ?? ''))
+    const own = ctx.addresses.find((a: any) => {
+        const br = b64ToAddrLocal(a.addr ?? '')
+        return br && (br === from || br === to)
+    })
+    return {
+        height:     String(ctx.height),
+        txIndex:    ctx.txIndex,
+        nonce:      String(t.nonce ?? '0'),
+        from,
+        to,
+        amount:     String(t.amount ?? '0'),
+        gasLimit:   String(t.gasLimit ?? '0'),
+        gasUsed:    String(t.gasUsed ?? '0'),
+        gasPrice:   String(t.gasPrice ?? '0'),
+        balance:    String(own?.balance ?? '0'),
+        step:       t.step,
+        status:     t.status,
+        txHash:     b64HashToHex(String(t.txHash ?? '')),
+        uniqueHash: b64HashToHex(String(t.uniqueHash ?? '')),
+        shard:      ctx.shardId,
+    }
 }
 
 // ─── open tx detail drawer (from network tx list — needs enrichment) ──────────
-async function openTxGroupDrawer(txGroup: TxGroup) {
+async function openTxGroupDrawer(txGroup: TxGroup, blockTx?: any) {
     selectedTxGroup.value = txGroup
     selectedTxItem.value = null
     txDetailDrawerVisible.value = true
+
+    // The block's own txList is authoritative and needs no round trip. The RPC
+    // path below is a fallback for callers that only have an address group.
+    if (blockTx) {
+        selectedTxItem.value = txItemFromBlockTx(blockTx, {
+            txIndex: txGroup.txIndex,
+            height: String(selectedBlock.value?.blockInfo?.height ?? '0'),
+            shardId: selectedBlock.value?.shardId ?? viewShard.value,
+            addresses: txGroup.addresses,
+        } as NetworkTxItem)
+        return
+    }
+
     const height = selectedBlock.value?.blockInfo?.height
     const shardId = selectedBlock.value?.shardId ?? viewShard.value
     txEnrichLoading.value = true
@@ -1200,6 +1234,13 @@ async function search() {
     try {
         if (q.length === 40) {
             // ── Address → 填入地址列表 ────────────────────────────────
+            // The root shard caches copies of accounts it does not own and
+            // answers with a stale nonce, so an explicit address probe there
+            // would report wrong data rather than no data.
+            if (selectedShard.value === ROOT_SHARD) {
+                error.value = `分片 ${ROOT_SHARD} 是 root 分片，不持有普通账户，请换一个分片查询地址`
+                return
+            }
             const acc = selectedShard.value === 'auto'
                 ? await queryAccount(q)
                 : await queryAccountOnShard(q, selectedShard.value as number)
@@ -1222,7 +1263,7 @@ async function search() {
             // ── Block hash or Tx hash ─────────────────────────────────
             const hash = '0x' + q
             const shardsToTry = selectedShard.value === 'auto'
-                ? [viewShard.value, ...SHARDS.filter(s => s !== viewShard.value)]
+                ? [viewShard.value, ...VIEW_SHARDS.filter(s => s !== viewShard.value)]
                 : [selectedShard.value as number]
 
             // Try block hash first
