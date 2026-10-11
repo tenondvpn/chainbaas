@@ -1,5 +1,13 @@
 <template>
     <div class="editor-container" :class="{ 'fullscreen': isFullscreen }">
+        <!-- A contract selected from the chain may carry no source. The editor is
+             still the place to supply its code: pasting here gives the address an
+             ABI to call against, without writing that code back to the chain. -->
+        <div v-if="needsSourceCode" class="paste-hint">
+            This contract has no source code on chain. Paste its Solidity code below to
+            enable Preset GAS and function calls — it is kept for this session only and
+            is not written back to the contract.
+        </div>
         <div class="editor-wrapper" ref="editorContainer">
             <div ref="editorElement" class="code-editor"></div>
         </div>
@@ -84,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, reactive, computed } from 'vue'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { indentWithTab } from '@codemirror/commands'
@@ -150,6 +158,15 @@ var second_timer = null;
 const prev_saved_code = ref('')
 const test_url = ref('http://192.168.56.136:7001')
 
+// True when the selected contract lives on chain but carries no source, so the
+// editor is being used to supply code for it rather than to edit stored code.
+// Code pasted in this state is compiled locally for its ABI and is never written
+// back to the contract — the chain's copy stays authoritative.
+const needsSourceCode = ref(false)
+// Set once the user supplies code for a source-less contract. It keeps the paste
+// from being auto-saved over the (empty) on-chain source.
+const supplyingSource = ref(false)
+
 const form = reactive({
     args: [],
     function: '',
@@ -160,6 +177,27 @@ const getTimestamp = () => {
 }
 
 var prev_save_graph_tm_ms = getTimestamp()
+
+// Compile the code currently in the editor to derive an ABI, when none is
+// loaded. This is what lets a source-less contract be called: the user pastes
+// the contract's code, and its ABI comes from compiling that code rather than
+// from the explorer DB. Returns true when an ABI is available afterwards.
+async function ensureAbiFromSource(): Promise<boolean> {
+    if (abiJson.value && abiJson.value.length > 0) return true
+    if (!codeValue.value.trim()) return false
+    try {
+        const result = await compileSolidity(0, codeValue.value)
+        if (result.status !== 0) {
+            console.log('compile for ABI failed:', result.msg)
+            return false
+        }
+        abiJson.value = JSON.parse(result.abi)
+        return true
+    } catch (e) {
+        console.log('compile for ABI failed:', e)
+        return false
+    }
+}
 
 const emitterOn = () => {
 
@@ -235,9 +273,10 @@ emitter.on('deploy_solidity_code', (code: string) => {
     }
 });
 
-emitter.on('call_function_solidity_code', (code: string) => {
+emitter.on('call_function_solidity_code', async (code: string) => {
     run_loading.value = false
     dialogTitle.value = 'Call Contract Function'
+    await ensureAbiFromSource()
     parseSolidity()
     form.args = []
     if (otherFunctions.value.length == 0) {
@@ -321,6 +360,11 @@ const update_graph = async (data) => {
             codeValue.value = obj["code"]
             contractAddress.value = obj["address"]
             abiJson.value = JSON.parse(obj["abi"])
+            // A contract loaded from the tree with an address but no stored source
+            // needs its code supplied here before it can be called. Drafts (no
+            // address) and freshly deployed contracts are untouched by this.
+            supplyingSource.value = !!(obj["from_chain"] && obj["address"] && !obj["code"])
+            needsSourceCode.value = supplyingSource.value
             console.log("test get abi: ", obj["abi"])
             // Verify against the shard the contract was stored with, not the
             // caller's — a lookup on the wrong shard reports a live contract as
@@ -375,111 +419,36 @@ function confirmDialog() {
     }
 }
 
-function decodeOutput(abi, functionName, outputHex) {
-    const funcAbi = abi.find(item => 
-        item.type === "function" && item.name === functionName
-    );
+// Render a web3-decoded value as readable text. web3 already resolves structs
+// to objects and arrays to JS arrays, so the only work here is choosing a shape:
+// primitives inline, containers indented one level. bigint must be converted
+// before String() — it would otherwise print with a trailing "n" and throw
+// inside template interpolation.
+function formatDecodedValue(value, indent) {
+    if (value === null || value === undefined) return String(value)
+    if (typeof value === 'bigint') return value.toString()
+    if (typeof value === 'string') return value
+    if (typeof value !== 'object') return String(value)
 
-    if (!funcAbi || !funcAbi.outputs) return "No outputs";
-
-    const cleanHex = outputHex.startsWith('0x') ? outputHex.slice(2) : outputHex;
-    const resultObj = {};
-
-    funcAbi.outputs.forEach((output, index) => {
-        const key = output.name || `arg${index}`;
-        // 获取当前位置的 32 字节块
-        const currentChunk = cleanHex.slice(index * 64, (index + 1) * 64);
-        resultObj[key] = complexDecode(output, currentChunk, cleanHex);
-    });
-
-    return JSON.stringify(resultObj, (key, value) => 
-        typeof value === 'bigint' ? value.toString() : value, 2
-    );
-}
-
-function complexDecode(output, chunk, fullHex) {
-    const type = output.type;
-
-    // 1. 处理动态数组 (如 DataSummary[])
-    if (type.endsWith('[]')) {
-        const offset = parseInt(chunk, 16) * 2; 
-        const length = parseInt(fullHex.slice(offset, offset + 64), 16);
-        const baseType = type.replace('[]', '');
-        const items = [];
-        
-        const arrayContentStart = offset + 64;
-
-        for (let i = 0; i < length; i++) {
-            if (baseType === 'tuple') {
-                // 关键点：结构体数组中，每个元素通常是一个指向具体内容的偏移量
-                const itemOffsetInArray = parseInt(fullHex.slice(arrayContentStart + (i * 64), arrayContentStart + (i + 1) * 64), 16) * 2;
-                const absoluteStructStart = arrayContentStart + itemOffsetInArray;
-                
-                // 传入该结构体相对于 fullHex 的起始位置进行解析
-                items.push(decodeTuple(output.components, fullHex.slice(absoluteStructStart), fullHex));
-            } else {
-                const itemHex = fullHex.slice(arrayContentStart + (i * 64), arrayContentStart + (i + 1) * 64);
-                items.push(simpleItemDecode(baseType, itemHex));
-            }
-        }
-        return items;
+    if (Array.isArray(value)) {
+        if (value.length === 0) return '[]'
+        const inner = indent + '  '
+        const lines = value.map((v, i) => `${inner}[${i}] ${formatDecodedValue(v, inner)}`)
+        return '\n' + lines.join('\n') + '\n' + indent
     }
 
-    // 2. 处理独立字符串
-    if (type === 'string') {
-        const offset = parseInt(chunk, 16) * 2;
-        const length = parseInt(fullHex.slice(offset, offset + 64), 16) * 2;
-        return hexToUtf8(fullHex.slice(offset + 64, offset + 64 + length));
-    }
-
-    return simpleItemDecode(type, chunk);
-}
-
-function decodeTuple(components, structHex, fullContextHex) {
-    const structData = {};
-    
-    components.forEach((comp, j) => {
-        // 获取当前字段在结构体 Head 中的 32 字节块
-        const fieldChunk = structHex.slice(j * 64, (j + 1) * 64);
-        
-        if (comp.type === 'string' || comp.type.endsWith('[]') || comp.type === 'tuple') {
-            // 处理动态类型的二次偏移
-            const internalOffset = parseInt(fieldChunk, 16) * 2;
-            // 注意：结构体内部的偏移是相对于结构体起始位置的
-            const dynamicDataStart = internalOffset; 
-            
-            if (comp.type === 'string') {
-                const strData = structHex.slice(dynamicDataStart);
-                const len = parseInt(strData.slice(0, 64), 16) * 2;
-                structData[comp.name] = hexToUtf8(strData.slice(64, 64 + len));
-            } else {
-                // 递归处理嵌套数组或元组
-                structData[comp.name] = complexDecode(comp, fieldChunk, structHex);
-            }
-        } else {
-            // 静态类型（bytes32, address, uint256）直接解码
-            structData[comp.name] = simpleItemDecode(comp.type, fieldChunk);
-        }
-    });
-    return structData;
-}
-
-function simpleItemDecode(type, hex) {
-    if (!hex) return null;
-    if (type === 'address') return '0x' + hex.slice(24).toLowerCase();
-    if (type === 'uint256') return BigInt('0x' + hex);
-    if (type === 'bytes32') return '0x' + hex;
-    return hex;
-}
-
-function hexToUtf8(hex) {
-    let str = '';
-    for (let i = 0; i < hex.length; i += 2) {
-        const charCode = parseInt(hex.substr(i, 2), 16);
-        if (charCode === 0) continue;
-        str += String.fromCharCode(charCode);
-    }
-    return decodeURIComponent(escape(str));
+    // Decoded structs/tuples expose both named fields and numeric duplicates of
+    // them (plus __length__). Keep one form: the names when present, the indices
+    // otherwise — printing both would double every field.
+    const keys = Object.keys(value).filter(k => k !== '__length__')
+    const named = keys.filter(k => !/^\d+$/.test(k))
+    const chosen = named.length > 0
+        ? named
+        : keys.filter(k => /^\d+$/.test(k)).sort((a, b) => Number(a) - Number(b))
+    if (chosen.length === 0) return '{}'
+    const inner = indent + '  '
+    const lines = chosen.map(k => `${inner}${k}: ${formatDecodedValue(value[k], inner)}`)
+    return '\n' + lines.join('\n') + '\n' + indent
 }
 
 // Normalize a user-supplied string to a value compatible with web3 ABI encoding.
@@ -519,21 +488,18 @@ async function callFunction() {
         values.push(arg.value)
     }
 
-    // If ABI not loaded, compile source code in memory to get it
+    // If ABI not loaded, compile source code in memory to get it. This is the
+    // path a source-less contract takes once its code has been pasted in.
     if (!abiJson.value || abiJson.value.length === 0) {
-        try {
-            const compileResult = await compileSolidity(0, codeValue.value)
-            if (compileResult.status !== 0) {
-                ElMessage({ type: 'error', message: 'Cannot get ABI (compile failed): ' + compileResult.msg })
-                run_loading.value = false
-                return
-            }
-            abiJson.value = JSON.parse(compileResult.abi)
-        } catch (e) {
-            ElMessage({ type: 'error', message: 'Cannot get ABI: ' + e })
+        const gotAbi = await ensureAbiFromSource()
+        if (!gotAbi) {
+            ElMessage({ type: 'error', message: 'Cannot get ABI: 请在编辑器中粘贴合约源码' })
             run_loading.value = false
             return
         }
+        // Rebuild the function list from the ABI just derived, so the selected
+        // entry's mutability and types match what the encoder will use.
+        parseSolidity()
     }
 
     var abiFunction = abiJson.value.find((item) => item.type === 'function' && item.name === form.function);
@@ -603,13 +569,17 @@ async function callFunction() {
                     try {
                         const decoded = w3.eth.abi.decodeParameters(funcAbi.outputs, '0x' + result.outputHex)
                         if (funcAbi.outputs.length === 1) {
-                            res_data = String(decoded[0])
+                            // A single output may still be a struct, tuple or array.
+                            // String() collapses those to "[object Object]", so any
+                            // non-primitive is rendered structurally instead.
+                            res_data = formatDecodedValue(decoded[0], '')
                         } else {
-                            res_data = JSON.stringify(
-                                Object.fromEntries(funcAbi.outputs.map((o, i) => [o.name || `arg${i}`, decoded[i]])),
-                                (k, v) => typeof v === 'bigint' ? v.toString() : v,
-                                2
-                            )
+                            // Decoded structs carry both named and numeric keys;
+                            // prefer the names and drop the duplicate indices.
+                            const named = funcAbi.outputs.map((o, i) => [o.name || `arg${i}`, decoded[i]])
+                            res_data = named
+                                .map(([k, v]) => `${k}: ${formatDecodedValue(v, '  ')}`)
+                                .join('\n')
                         }
                     } catch (err) {
                         console.error("ABI decode failed:", err.message)
@@ -890,21 +860,59 @@ const codeValue = ref(`// SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.7.0 <0.9.0;
 
 `)
-// Main parsing function
+// Main parsing function. The ABI is authoritative when one is loaded — it is
+// what the encoder will use, so the dropdown must be built from the same source
+// or a name can appear that the ABI cannot encode. The regex scan below is only
+// a fallback for when no ABI could be derived.
 function parseSolidity() {
     try {
         // Reset results
         constructor.value = null;
         otherFunctions.value = [];
 
-        // Parse all functions
-        parseAllFunctions();
+        if (abiJson.value && abiJson.value.length > 0) {
+            parseFromAbi();
+        } else {
+            parseAllFunctions();
+        }
 
         console.log('Constructor:', constructor.value);
         console.log('Other Functions:', otherFunctions.value);
 
     } catch (error) {
         console.error('Parse error:', error);
+    }
+}
+
+// Build the constructor/callable lists from a parsed ABI. Parameter and return
+// types come straight from the ABI, so structs and arrays display correctly
+// where the regex scan can only capture a bracketed substring.
+function parseFromAbi() {
+    for (const item of abiJson.value) {
+        if (item.type === 'constructor') {
+            constructor.value = {
+                name: 'constructor',
+                parameters: (item.inputs ?? []).map(i => ({
+                    type: i.type,
+                    name: i.name || '',
+                })),
+                visibility: 'public',
+                stateMutability: item.stateMutability ?? 'nonpayable',
+                returns: '',
+            };
+            continue;
+        }
+        if (item.type !== 'function') continue
+        otherFunctions.value.push({
+            name: item.name,
+            parameters: (item.inputs ?? []).map(i => ({
+                type: i.type,
+                name: i.name || '',
+            })),
+            visibility: 'external',
+            stateMutability: item.stateMutability ?? 'nonpayable',
+            returns: (item.outputs ?? []).map(o => o.type).join(', '),
+        })
     }
 }
 
@@ -1292,6 +1300,13 @@ const TimeToSaveGraph = () => {
         prev_save_graph_tm_ms = now_tm_ms;
         prev_saved_code.value = codeValue.value
         if (contractAddress.value) {
+            // Code pasted to stand in for a contract that has none on chain is a
+            // local aid, not the contract's stored source. Writing it back would
+            // replace the authoritative (empty) record with a guess.
+            if (supplyingSource.value) {
+                console.log('auto-save skipped: code supplied locally for source-less contract')
+                return
+            }
             const abiStr = abiJson.value ? JSON.stringify(abiJson.value) : ''
             // Editing a contract this session did not deploy: its shard came from
             // the tree (remembered on open) or is unknown. Writing without a known
@@ -1424,6 +1439,16 @@ watch(codeValue, (newValue) => {
     height: 70vh;
     overflow: hidden;
 }
+
+.paste-hint {
+    padding: 6px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #8a6d00;
+    background: #fff8e1;
+    border-bottom: 1px solid #f0d891;
+}
+
 
 .code-editor {
     height: 100%;

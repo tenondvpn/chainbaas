@@ -682,6 +682,10 @@ const handleNodeClick = async (nodeData, nodeInstance) => {
             // Carried through so the editor can re-verify the contract against the
             // shard it actually lives on rather than whatever is selected later.
             shard: contractShard,
+            // Marks the payload as chain-loaded rather than a local draft. The
+            // editor uses it to offer a paste-code workflow when source_code is
+            // empty, without treating a nameless draft the same way.
+            from_chain: true,
         })
         emitter.emit('show_update_graph', { tag: '1', project_path: '/链上合约', pipe_id: str_id })
         emitter.emit('update_graph', {

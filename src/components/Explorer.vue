@@ -67,7 +67,7 @@
                             {{ searchMode==='block' ? '区块搜索结果' : `最新区块 (Shard ${viewShard}${viewPool !== null ? ` / Pool ${viewPool}` : ''})` }}
                             <el-tag v-if="searchMode==='block'" size="small" type="warning" style="margin-left:6px;cursor:pointer" @click="clearSearch">× 清除</el-tag>
                         </span>
-                        <el-button size="small" link :loading="blocksLoading" @click="loadLatestBlocks">刷新</el-button>
+                        <el-button size="small" link :loading="blocksLoading" @click="loadLatestBlocks(blockCursorStack[blockPage])">刷新</el-button>
                     </div>
                     <el-skeleton v-if="blocksLoading && !latestBlocks.length" :rows="5" animated />
                     <el-table v-else :data="latestBlocks" stripe size="small" style="width:100%">
@@ -99,6 +99,11 @@
                         </el-table-column>
                     </el-table>
                     <div v-if="!blocksLoading && !latestBlocks.length" class="no-data">暂无区块数据</div>
+                    <div v-if="!searchMode && (blockHasMore || blockPage > 0)" class="pagination-row">
+                        <el-button :disabled="blockPage === 0" size="small" @click="blockPrevPage">上一页</el-button>
+                        <span class="page-indicator">第 {{ blockPage + 1 }} 页</span>
+                        <el-button :disabled="!blockHasMore" size="small" @click="blockNextPage">下一页</el-button>
+                    </div>
                 </el-col>
 
                 <el-col :span="12" :xs="24">
@@ -107,7 +112,7 @@
                             {{ searchMode==='tx' ? '交易搜索结果' : `最新交易 (Shard ${viewShard}${viewPool !== null ? ` / Pool ${viewPool}` : ''})` }}
                             <el-tag v-if="searchMode==='tx'" size="small" type="warning" style="margin-left:6px;cursor:pointer" @click="clearSearch">× 清除</el-tag>
                         </span>
-                        <el-button size="small" link :loading="activityLoading" @click="loadNetworkActivity">刷新</el-button>
+                        <el-button size="small" link :loading="activityLoading" @click="loadNetworkActivity(txCursorStack[txPage])">刷新</el-button>
                     </div>
                     <el-skeleton v-if="activityLoading && !networkTxs.length" :rows="5" animated />
                     <el-table v-else :data="networkTxs" stripe size="small" style="width:100%">
@@ -142,6 +147,11 @@
                         </el-table-column>
                     </el-table>
                     <div v-if="!activityLoading && !networkTxs.length" class="no-data">暂无交易数据</div>
+                    <div v-if="!searchMode && (txHasMore || txPage > 0)" class="pagination-row">
+                        <el-button :disabled="txPage === 0" size="small" @click="txPrevPage">上一页</el-button>
+                        <span class="page-indicator">第 {{ txPage + 1 }} 页</span>
+                        <el-button :disabled="!txHasMore" size="small" @click="txNextPage">下一页</el-button>
+                    </div>
                 </el-col>
             </el-row>
 
@@ -599,6 +609,7 @@ import {
     getLatestPoolInfo, getBlocks,
     getAllAccounts, explorerGetBlock, explorerGetTx,
     explorerGetContracts, explorerGetContractTxs,
+    explorerGetBlocks, explorerGetTransactions,
     type ShardStatus, type TxItem, type NetworkTxItem, type ChainAccount,
 } from '../services/shardora'
 
@@ -623,6 +634,21 @@ const latestBlocks = ref<any[]>([])
 const networkTxs = ref<NetworkTxItem[]>([])
 const blocksLoading = ref(false)
 const activityLoading = ref(false)
+
+// Cursor stacks for the two paged panels. cursorStack[i] is the before_id that
+// loads page i (null = first page); the explorer DB returns id-ordered rows, so
+// walking back is a cursor rather than an offset.
+const blockCursorStack = ref<Array<number | null>>([null])
+const blockPage = ref(0)
+const blockHasMore = ref(false)
+const blockNextCursor = ref<number | null>(null)
+
+const txCursorStack = ref<Array<number | null>>([null])
+const txPage = ref(0)
+const txHasMore = ref(false)
+const txNextCursor = ref<number | null>(null)
+
+const PAGE_SIZE = 15
 
 const blockDetailVisible = ref(false)
 const selectedBlock = ref<any>(null)
@@ -804,33 +830,79 @@ async function loadPools() {
     poolsLoading.value = false
 }
 
-async function loadLatestBlocks() {
+async function loadLatestBlocks(cursor: number | null = null) {
     blocksLoading.value = true
-    if (viewPool.value === null) {
-        const blocks = await getLatestNetworkBlocks(viewShard.value, 15)
-        latestBlocks.value = blocks.map(b => ({ ...b }))
-    } else {
-        const poolInfo = poolList.value.find(p => p.idx === viewPool.value)
-        if (!poolInfo) { latestBlocks.value = []; blocksLoading.value = false; return }
-        const h = parseInt(poolInfo.height)
-        const start = Math.max(1, h - 14)
-        const res = await getBlocks(viewShard.value, viewPool.value, start, 15)
-        latestBlocks.value = (res?.blocks ?? [])
-            .filter((b: any) => b.blockInfo)
-            .map((b: any) => ({ ...b, poolIndex: viewPool.value, shardId: viewShard.value }))
-            .reverse()
-    }
+    const params: Record<string, any> = { before_id: cursor ?? undefined, limit: PAGE_SIZE }
+    // The explorer DB is per-shard, so a pool filter is only meaningful within
+    // the selected shard. Omitting it returns that shard's latest blocks across
+    // all pools.
+    if (viewPool.value !== null) params.pool_index = viewPool.value
+    const res = await explorerGetBlocks(viewShard.value, params)
+    const rows = Array.isArray(res?.data) ? res.data : []
+    latestBlocks.value = rows.map(normalizeExplorerBlock)
+    blockHasMore.value = !!res?.has_more
+    blockNextCursor.value = res?.next_cursor ?? null
     blocksLoading.value = false
 }
 
-async function loadNetworkActivity() {
+async function loadNetworkActivity(cursor: number | null = null) {
     activityLoading.value = true
-    if (viewPool.value === null) {
-        networkTxs.value = await getNetworkTransactions(viewShard.value, 40)
-    } else {
-        networkTxs.value = extractTxsFromBlocks(latestBlocks.value).slice(0, 40)
-    }
+    const params: Record<string, any> = { before_id: cursor ?? undefined, limit: PAGE_SIZE }
+    if (viewPool.value !== null) params.shard_id = viewShard.value
+    const res = await explorerGetTransactions(viewShard.value, params)
+    const rows = Array.isArray(res?.data) ? res.data : []
+    networkTxs.value = rows.map(t => ({
+        height:    String(t.height ?? 0),
+        poolIndex: t.pool_index ?? 0,
+        shardId:   t.shard_id ?? viewShard.value,
+        timestamp: String(t.timestamp ?? 0),
+        txIndex:   t.tx_index ?? 0,
+        addrCount: 0,
+        addresses: [],
+        kvChanges: [],
+        blockRef:  null,
+        tx:        normalizeExplorerTx(t),
+    }))
+    txHasMore.value = !!res?.has_more
+    txNextCursor.value = res?.next_cursor ?? null
     activityLoading.value = false
+}
+
+function blockNextPage() {
+    if (!blockHasMore.value) return
+    blockPage.value += 1
+    blockCursorStack.value = [...blockCursorStack.value.slice(0, blockPage.value), blockNextCursor.value]
+    loadLatestBlocks(blockNextCursor.value)
+}
+
+function blockPrevPage() {
+    if (blockPage.value === 0) return
+    blockPage.value -= 1
+    loadLatestBlocks(blockCursorStack.value[blockPage.value])
+}
+
+function txNextPage() {
+    if (!txHasMore.value) return
+    txPage.value += 1
+    txCursorStack.value = [...txCursorStack.value.slice(0, txPage.value), txNextCursor.value]
+    loadNetworkActivity(txNextCursor.value)
+}
+
+function txPrevPage() {
+    if (txPage.value === 0) return
+    txPage.value -= 1
+    loadNetworkActivity(txCursorStack.value[txPage.value])
+}
+
+// Reset both panels to their first page. Called whenever the shard or pool
+// changes: a cursor from one shard's id-space is meaningless in another's.
+function resetPanels() {
+    blockCursorStack.value = [null]
+    blockPage.value = 0
+    txCursorStack.value = [null]
+    txPage.value = 0
+    loadLatestBlocks(null)
+    loadNetworkActivity(null)
 }
 
 function extractTxsFromBlocks(blocks: any[]): NetworkTxItem[] {
@@ -843,8 +915,7 @@ async function onViewShardChange() {
     networkTxs.value = []
     addrCursorStack.value = []
     await loadPools()
-    await loadLatestBlocks()
-    loadNetworkActivity()
+    resetPanels()
     loadChainAddresses(0)
 }
 
@@ -852,16 +923,14 @@ async function onViewPoolChange() {
     latestBlocks.value = []
     networkTxs.value = []
     addrCursorStack.value = []
-    await loadLatestBlocks()
-    loadNetworkActivity()
+    resetPanels()
     loadChainAddresses(0)
 }
 
 function refreshAll() {
     checkStatus()
     loadPools()
-    loadLatestBlocks()
-    loadNetworkActivity()
+    resetPanels()
 }
 
 onMounted(() => {
@@ -874,8 +943,10 @@ onMounted(() => {
     loadContracts(0)
     autoRefreshTimer = setInterval(async () => {
         if (searchMode.value === 'none') {
-            await loadLatestBlocks()
-            loadNetworkActivity()
+            // Stay on the page the user is looking at: reloading page 0 here
+            // would yank them back to the top every 30s while they read.
+            await loadLatestBlocks(blockCursorStack.value[blockPage.value])
+            loadNetworkActivity(txCursorStack.value[txPage.value])
         }
         loadChainAddresses(0)
         loadContracts(0)
@@ -1219,8 +1290,7 @@ function clearSearch() {
     query.value = ''
     if (searchMode.value !== 'none') {
         searchMode.value = 'none'
-        loadLatestBlocks()
-        loadNetworkActivity()
+        resetPanels()
         loadChainAddresses(0)
     }
 }
@@ -1337,7 +1407,8 @@ async function search() {
 .addr-cell:hover { text-decoration:underline; }
 .link-text { color:var(--el-color-primary); cursor:pointer; font-weight:600; }
 .no-data { color:var(--el-text-color-secondary); font-size:13px; padding:16px 0; text-align:center; }
-.pagination-row { display:flex; align-items:center; gap:12px; padding:12px 0; }
+.pagination-row { display:flex; align-items:center; justify-content:center; gap:12px; padding:12px 0; }
+.page-indicator { font-size:12px; color:var(--el-text-color-secondary); }
 .page-info { font-size:13px; color:var(--el-text-color-regular); }
 .text-muted { color:var(--el-text-color-secondary); font-size:12px; }
 </style>

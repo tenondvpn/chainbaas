@@ -930,6 +930,38 @@ export async function explorerGetContractTxs(
     }
 }
 
+// Cursor-paged block list. before_id walks backwards through the id-ordered
+// list, so page N+1 is whatever precedes the last row of page N.
+export async function explorerGetBlocks(
+    shardId: number,
+    params: { before_id?: number; limit?: number; pool_index?: number; is_root?: number } = {}
+): Promise<any> {
+    try {
+        return await get<any>(shardId, 'explorer/blocks', { limit: 20, ...params })
+    } catch (_) {
+        return null
+    }
+}
+
+// Cursor-paged transaction list, same before_id contract as the block list.
+export async function explorerGetTransactions(
+    shardId: number,
+    params: { before_id?: number; limit?: number; shard_id?: number; step_type?: number; hide_system?: number } = {}
+): Promise<any> {
+    try {
+        const query: Record<string, any> = { limit: 20, ...params }
+        // hide_system is a frontend convenience; the API takes is_system where
+        // 0=user txs, 1=system txs, -1=all. Translate rather than pass it through.
+        if (query.hide_system !== undefined) {
+            query.is_system = query.hide_system ? 0 : -1
+            delete query.hide_system
+        }
+        return await get<any>(shardId, 'explorer/transactions', query)
+    } catch (_) {
+        return null
+    }
+}
+
 export interface DeployContractOpts {
     privateKeyHex: string
     shardId: number
