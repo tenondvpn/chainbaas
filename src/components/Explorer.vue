@@ -874,10 +874,8 @@ async function loadNetworkActivity(cursor: number | null = null) {
         limit: PAGE_SIZE,
     }
     if (viewPool.value !== null) params.pool_index = viewPool.value
-    console.log('[explorer] transactions request', viewShard.value, JSON.stringify(params))
     const res = await explorerGetTransactions(viewShard.value, params)
     const rows = Array.isArray(res?.data) ? res.data : []
-    console.log('[explorer] transactions response', { has_more: res?.has_more, count: rows.length, poolIndexes: [...new Set(rows.map((r: any) => r.pool_index))] })
     networkTxs.value = rows.map(t => ({
         height:    String(t.height ?? 0),
         poolIndex: t.pool_index ?? 0,
@@ -888,6 +886,7 @@ async function loadNetworkActivity(cursor: number | null = null) {
         addresses: [],
         kvChanges: [],
         blockRef:  null,
+        blockHash: t.block_hash ?? '',
         tx:        normalizeExplorerTx(t),
     }))
     txHasMore.value = !!res?.has_more
@@ -998,7 +997,6 @@ async function openBlockDetail(row: any) {
         // /get_block_with_hash hex-decodes its input, so the prefix must go.
         const hashHex = String(row._explorerHash).replace(/^0x/, '')
         const full = await getBlockWithHash(row.shardId ?? viewShard.value, hashHex)
-        console.log('[explorer] block detail refetch', hashHex, full ? 'ok' : 'null')
         if (full) {
             // Preserve the explorer poolIndex, which the node JSON may omit.
             selectedBlock.value = { ...full, poolIndex: row.poolIndex, shardId: row.shardId ?? viewShard.value }
@@ -1100,10 +1098,30 @@ function openBlockTxDetail(row: BlockTxRow) {
 
 // ─── open tx drawer from network tx list ──────────────────────────────────────
 async function openNetworkTxDrawer(item: NetworkTxItem) {
-    // Wrap the networkTxItem's data into the same shape openTxGroupDrawer expects
-    selectedBlock.value = item.blockRef
-    const group = { txIndex: item.txIndex, addresses: item.addresses, kvChanges: item.kvChanges }
-    await openTxGroupDrawer(group, item.tx)
+    // /explorer/transactions returns only the tx rows — the drawer's state-change
+    // and KV tables come from the block's addressArray/keyValueArray. Refetch the
+    // full block by hash so the drawer shows exactly what the block list shows.
+    selectedTxItem.value = item.tx ? normalizeExplorerTx(item.tx) : null
+    selectedTxGroup.value = { txIndex: item.txIndex, addresses: [], kvChanges: [] }
+    txDetailDrawerVisible.value = true
+
+    const txHashHex = String(selectedTxItem.value?.txHash ?? '').replace(/^0x/, '')
+    const hashHex = String((item as any).blockHash ?? '').replace(/^0x/, '')
+    if (!hashHex || !txHashHex) return
+
+    txEnrichLoading.value = true
+    try {
+        const full = await getBlockWithHash(item.shardId ?? viewShard.value, hashHex)
+        if (!full) return
+        // The explorer tx rows carry no tx index, so recover it from the block's
+        // own txList by hash. Tx hashes arrive base64 there and as 0x-hex here.
+        const txList: any[] = full?.blockInfo?.txList ?? []
+        const idx = txList.findIndex(t => b64HashToHex(String(t?.txHash ?? '')) === txHashHex)
+        const group = groupedTxs(full).find(g => g.txIndex === (idx >= 0 ? idx : item.txIndex))
+        if (group) selectedTxGroup.value = group
+    } finally {
+        txEnrichLoading.value = false
+    }
 }
 
 /** blockInfo.txList entries already carry every field the drawer needs except

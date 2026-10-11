@@ -738,6 +738,9 @@ export interface NetworkTxItem {
     addresses: any[]
     kvChanges: any[]
     blockRef: any
+    /** 0x-hex block hash from /explorer/transactions; used to refetch the full
+     *  block so the detail drawer can show address state and KV changes. */
+    blockHash?: string
     /** Present when the row came from blockInfo.txList rather than addressArray.
      *  Carries the real tx fields (from/to/amount/txHash/step/status). */
     tx?: any
