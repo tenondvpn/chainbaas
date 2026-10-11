@@ -375,19 +375,31 @@ const update_graph = async (data) => {
                 || knownContractShard(obj["address"])
                 || await resolveShardForAccount(preivateKey.value)
             if (!detailShard) {
-                emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "无法确定合约所在分片"})
+                if (obj["address"]) {
+                    // The address came from the tree's own explorer listing, so it
+                    // is already known to exist. Publishing it here is what enables
+                    // Preset GAS / Call Function; the detail lookup below only adds
+                    // source_code, which a pasted-source contract does not need.
+                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": obj["address"]})
+                } else {
+                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "无法确定合约所在分片"})
+                }
                 return
             }
             rememberContractShard(obj["address"], detailShard)
+            // Publish the address first so the toolbar (Preset GAS / Call
+            // Function / Deploy) turns on immediately. The detail request below
+            // then enriches the record; a failure there is a cosmetic loss of
+            // source_code, not a reason to keep the buttons disabled.
+            if (obj["address"]) {
+                emitter.emit('deploy_solidity_code_res', {"status": 0, "id": obj["address"]})
+            }
             explorerGetContract(detailShard, obj["address"]).then(detail => {
-                if (detail) {
-                    emitter.emit('deploy_solidity_code_res', {"status": 0, "id": detail.addr ?? obj["address"]});
-                } else {
-                    emitter.emit('deploy_solidity_code_res', {"status": 1, "id": "contract not found on chain"});
+                if (!detail) {
+                    console.log('contract detail not found on shard', detailShard)
                 }
             }).catch(error => {
-                ElMessage({ type: 'error', message: 'get contract failed: ' + error })
-                emitter.emit('deploy_solidity_code_res', {"status": 1, "id": 'get contract failed: ' + error});
+                console.log('get contract detail failed: ' + error)
             })
         } else {
             codeValue.value = data["data"]["pipe_usr_graph"]

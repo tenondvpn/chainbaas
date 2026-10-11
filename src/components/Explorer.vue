@@ -99,7 +99,7 @@
                         </el-table-column>
                     </el-table>
                     <div v-if="!blocksLoading && !latestBlocks.length" class="no-data">暂无区块数据</div>
-                    <div v-if="!searchMode && (blockHasMore || blockPage > 0)" class="pagination-row">
+                    <div v-if="searchMode === 'none' && (blockHasMore || blockPage > 0)" class="pagination-row">
                         <el-button :disabled="blockPage === 0" size="small" @click="blockPrevPage">上一页</el-button>
                         <span class="page-indicator">第 {{ blockPage + 1 }} 页</span>
                         <el-button :disabled="!blockHasMore" size="small" @click="blockNextPage">下一页</el-button>
@@ -147,7 +147,7 @@
                         </el-table-column>
                     </el-table>
                     <div v-if="!activityLoading && !networkTxs.length" class="no-data">暂无交易数据</div>
-                    <div v-if="!searchMode && (txHasMore || txPage > 0)" class="pagination-row">
+                    <div v-if="searchMode === 'none' && (txHasMore || txPage > 0)" class="pagination-row">
                         <el-button :disabled="txPage === 0" size="small" @click="txPrevPage">上一页</el-button>
                         <span class="page-indicator">第 {{ txPage + 1 }} 页</span>
                         <el-button :disabled="!txHasMore" size="small" @click="txNextPage">下一页</el-button>
