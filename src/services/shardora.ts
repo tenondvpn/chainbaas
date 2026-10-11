@@ -934,7 +934,7 @@ export async function explorerGetContractTxs(
 // list, so page N+1 is whatever precedes the last row of page N.
 export async function explorerGetBlocks(
     shardId: number,
-    params: { before_id?: number; limit?: number; pool_index?: number; is_root?: number } = {}
+    params: { before_id?: number; limit?: number; shard_id?: number; pool_index?: number; is_root?: number } = {}
 ): Promise<any> {
     try {
         return await get<any>(shardId, 'explorer/blocks', { limit: 20, ...params })

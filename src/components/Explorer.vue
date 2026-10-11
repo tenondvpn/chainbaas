@@ -832,10 +832,14 @@ async function loadPools() {
 
 async function loadLatestBlocks(cursor: number | null = null) {
     blocksLoading.value = true
-    const params: Record<string, any> = { before_id: cursor ?? undefined, limit: PAGE_SIZE }
-    // The explorer DB is per-shard, so a pool filter is only meaningful within
-    // the selected shard. Omitting it returns that shard's latest blocks across
-    // all pools.
+    // shard_id is always sent: the explorer DB holds every shard's rows, so
+    // without it the list spans shards. A pool is only meaningful together with
+    // its shard, so when one is selected both filters must match.
+    const params: Record<string, any> = {
+        shard_id: viewShard.value,
+        before_id: cursor ?? undefined,
+        limit: PAGE_SIZE,
+    }
     if (viewPool.value !== null) params.pool_index = viewPool.value
     const res = await explorerGetBlocks(viewShard.value, params)
     const rows = Array.isArray(res?.data) ? res.data : []
@@ -847,9 +851,13 @@ async function loadLatestBlocks(cursor: number | null = null) {
 
 async function loadNetworkActivity(cursor: number | null = null) {
     activityLoading.value = true
-    const params: Record<string, any> = { before_id: cursor ?? undefined, limit: PAGE_SIZE }
-    // The shard is already carried by the request path; the pool is the only
-    // filter the transactions endpoint understands.
+    // Same contract as the block list: shard_id is mandatory, and a pool filter
+    // only applies alongside its shard.
+    const params: Record<string, any> = {
+        shard_id: viewShard.value,
+        before_id: cursor ?? undefined,
+        limit: PAGE_SIZE,
+    }
     if (viewPool.value !== null) params.pool_index = viewPool.value
     const res = await explorerGetTransactions(viewShard.value, params)
     const rows = Array.isArray(res?.data) ? res.data : []
