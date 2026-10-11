@@ -848,7 +848,9 @@ async function loadLatestBlocks(cursor: number | null = null) {
 async function loadNetworkActivity(cursor: number | null = null) {
     activityLoading.value = true
     const params: Record<string, any> = { before_id: cursor ?? undefined, limit: PAGE_SIZE }
-    if (viewPool.value !== null) params.shard_id = viewShard.value
+    // The shard is already carried by the request path; the pool is the only
+    // filter the transactions endpoint understands.
+    if (viewPool.value !== null) params.pool_index = viewPool.value
     const res = await explorerGetTransactions(viewShard.value, params)
     const rows = Array.isArray(res?.data) ? res.data : []
     networkTxs.value = rows.map(t => ({

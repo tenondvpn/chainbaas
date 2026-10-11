@@ -359,12 +359,18 @@ const update_graph = async (data) => {
             const obj = JSON.parse(data["data"]["pipe_usr_graph"]);
             codeValue.value = obj["code"]
             contractAddress.value = obj["address"]
-            abiJson.value = JSON.parse(obj["abi"])
             // A contract loaded from the tree with an address but no stored source
             // needs its code supplied here before it can be called. Drafts (no
             // address) and freshly deployed contracts are untouched by this.
             supplyingSource.value = !!(obj["from_chain"] && obj["address"] && !obj["code"])
             needsSourceCode.value = supplyingSource.value
+            // A source-less chain contract carries whatever ABI the explorer DB
+            // last stored for that address — often a stale one from an unrelated
+            // deploy, or an empty string for a row that never had one. Trusting it
+            // would list another contract's functions, so drop it and let the ABI
+            // be derived from the code the user pastes instead.
+            const storedAbi = typeof obj["abi"] === 'string' ? obj["abi"].trim() : ''
+            abiJson.value = supplyingSource.value ? [] : (storedAbi && storedAbi !== '[]' ? JSON.parse(storedAbi) : [])
             console.log("test get abi: ", obj["abi"])
             // Verify against the shard the contract was stored with, not the
             // caller's — a lookup on the wrong shard reports a live contract as

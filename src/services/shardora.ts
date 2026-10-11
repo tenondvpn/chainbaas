@@ -946,7 +946,7 @@ export async function explorerGetBlocks(
 // Cursor-paged transaction list, same before_id contract as the block list.
 export async function explorerGetTransactions(
     shardId: number,
-    params: { before_id?: number; limit?: number; shard_id?: number; step_type?: number; hide_system?: number } = {}
+    params: { before_id?: number; limit?: number; shard_id?: number; pool_index?: number; step_type?: number; hide_system?: number } = {}
 ): Promise<any> {
     try {
         const query: Record<string, any> = { limit: 20, ...params }
