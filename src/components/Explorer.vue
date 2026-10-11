@@ -874,8 +874,10 @@ async function loadNetworkActivity(cursor: number | null = null) {
         limit: PAGE_SIZE,
     }
     if (viewPool.value !== null) params.pool_index = viewPool.value
+    console.log('[explorer] transactions request', viewShard.value, JSON.stringify(params))
     const res = await explorerGetTransactions(viewShard.value, params)
     const rows = Array.isArray(res?.data) ? res.data : []
+    console.log('[explorer] transactions response', { has_more: res?.has_more, count: rows.length, poolIndexes: [...new Set(rows.map((r: any) => r.pool_index))] })
     networkTxs.value = rows.map(t => ({
         height:    String(t.height ?? 0),
         poolIndex: t.pool_index ?? 0,
@@ -992,7 +994,11 @@ async function openBlockDetail(row: any) {
     // detail pane can show them. Rows that already carry blockInfo.version came
     // from the node and need no fetch.
     if (row?._explorerHash && row?.blockInfo && row.blockInfo.version === undefined) {
-        const full = await getBlockWithHash(row.shardId ?? viewShard.value, row._explorerHash)
+        // The explorer stores the hash with a "0x" prefix (HexStr adds it), but
+        // /get_block_with_hash hex-decodes its input, so the prefix must go.
+        const hashHex = String(row._explorerHash).replace(/^0x/, '')
+        const full = await getBlockWithHash(row.shardId ?? viewShard.value, hashHex)
+        console.log('[explorer] block detail refetch', hashHex, full ? 'ok' : 'null')
         if (full) {
             // Preserve the explorer poolIndex, which the node JSON may omit.
             selectedBlock.value = { ...full, poolIndex: row.poolIndex, shardId: row.shardId ?? viewShard.value }
