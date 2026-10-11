@@ -129,7 +129,7 @@
                                     <span class="mono" style="font-size:12px">
                                         {{ shortAddr(b64ToAddrLocal(row.tx.to)) }}
                                     </span>
-                                    <el-tag size="small" type="warning" style="margin-left:6px">{{ row.tx.step }}</el-tag>
+                                    <el-tag size="small" :type="stepType(row.tx.step).tagType" style="margin-left:6px">{{ stepType(row.tx.step).label }}</el-tag>
                                     <span v-if="row.tx.amount && row.tx.amount !== '0'" class="text-muted" style="margin-left:6px">
                                         {{ row.tx.amount }}
                                     </span>
@@ -294,10 +294,19 @@
                     <el-descriptions-item label="TmHeight">{{ selectedBlock.qc?.tmHeight }}</el-descriptions-item>
                     <el-descriptions-item label="QcPool">{{ selectedBlock.qc?.poolIndex }}</el-descriptions-item>
                     <el-descriptions-item label="BlockHash" :span="3">
-                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.qc?.viewBlockHash) }}</span>
+                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.qc?.viewBlockHash) || selectedBlock._explorerHash || '—' }}</span>
                     </el-descriptions-item>
                     <el-descriptions-item label="ParentHash" :span="3">
-                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.parentHash) }}</span>
+                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.parentHash) || '—' }}</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="SignX" :span="3">
+                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.qc?.signX) || '—' }}</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="SignY" :span="3">
+                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.qc?.signY) || '—' }}</span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="SignZ" :span="3">
+                        <span class="mono" style="font-size:11px;word-break:break-all">{{ b64ToHex(selectedBlock.qc?.signZ) || '—' }}</span>
                     </el-descriptions-item>
                 </el-descriptions>
 
@@ -518,7 +527,11 @@
                     <el-descriptions-item label="区块高度">{{ selectedTxItem.height }}</el-descriptions-item>
                     <el-descriptions-item label="TxIndex">{{ selectedTxItem.txIndex }}</el-descriptions-item>
                     <el-descriptions-item label="Nonce">{{ selectedTxItem.nonce }}</el-descriptions-item>
-                    <el-descriptions-item label="Step">{{ selectedTxItem.step }}</el-descriptions-item>
+                    <el-descriptions-item label="Step">
+                        <el-tag :type="stepType(selectedTxItem.step).tagType" size="small">
+                            {{ stepType(selectedTxItem.step).label }}
+                        </el-tag>
+                    </el-descriptions-item>
                     <el-descriptions-item label="状态">
                         <el-tag :type="selectedTxItem.status===0?'success':'danger'" size="small">
                             {{ selectedTxItem.status===0?'成功':selectedTxItem.status }}
@@ -602,11 +615,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
+import { useStepType } from './Explorer/composables/useStepType'
 import {
     queryAccount, queryAccountOnShard, queryAccountTxsOnShard,
     checkNetworkStatus, GENESIS_ACCOUNTS, VIEW_SHARDS, ROOT_SHARD,
     getLatestNetworkBlocks, getNetworkTransactions, txsFromBlocks,
-    getLatestPoolInfo, getBlocks,
+    getLatestPoolInfo, getBlocks, getBlockWithHash,
     getAllAccounts, explorerGetBlock, explorerGetTx,
     explorerGetContracts, explorerGetContractTxs,
     explorerGetBlocks, explorerGetTransactions,
@@ -614,6 +628,7 @@ import {
 } from '../services/shardora'
 
 // ─── state ────────────────────────────────────────────────────────────────────
+const stepType = useStepType
 const query = ref('')
 const selectedShard = ref<number | 'auto'>('auto')
 const loading = ref(false)
@@ -965,11 +980,26 @@ onMounted(() => {
 onUnmounted(() => { if (autoRefreshTimer) clearInterval(autoRefreshTimer) })
 
 // ─── block detail ──────────────────────────────────────────────────────────────
-function openBlockDetail(row: any) {
+async function openBlockDetail(row: any) {
     selectedBlock.value = row
     blockTxList.value = []
     blockDetailVisible.value = true
     loadBlockTransactions(row)  // async, non-blocking
+
+    // The block list is sourced from the explorer DB, whose rows carry only a
+    // slim summary: no QC view/signature, no version/chainId, no txList. When
+    // this row came from there, round-trip to the node for the full block so the
+    // detail pane can show them. Rows that already carry blockInfo.version came
+    // from the node and need no fetch.
+    if (row?._explorerHash && row?.blockInfo && row.blockInfo.version === undefined) {
+        const full = await getBlockWithHash(row.shardId ?? viewShard.value, row._explorerHash)
+        if (full) {
+            // Preserve the explorer poolIndex, which the node JSON may omit.
+            selectedBlock.value = { ...full, poolIndex: row.poolIndex, shardId: row.shardId ?? viewShard.value }
+            blockTxList.value = []
+            loadBlockTransactions(selectedBlock.value)
+        }
+    }
 }
 
 function normalizeExplorerTx(t: any): TxItem {
@@ -1006,12 +1036,14 @@ function normalizeExplorerBlock(b: any): any {
             networkId:   b.shard_id,
             electHeight: String(b.elect_height ?? 0),
             poolIndex:   b.pool_index,
+            viewBlockHash: b.hash ?? '',
         },
-        parentHash:   null,
+        parentHash:   b.parent_hash ?? null,
         addressArray: [],
         keyValueArray: [],
         _addrCount:   b.tx_count ?? 0,
         _explorerTxs: b.transactions ?? [],
+        _explorerHash: b.hash ?? '',
     }
 }
 

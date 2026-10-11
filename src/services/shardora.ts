@@ -506,6 +506,33 @@ export async function getBlocks(
     }
 }
 
+/** Full block (QC, view, txList, addressArray) keyed by its hex view-block hash.
+ *  The explorer DB keeps only a slim row, so detail views that need the QC
+ *  signature must round-trip to the node. */
+export async function getBlockWithHash(
+    shardId: number,
+    hashHex: string,
+): Promise<any | null> {
+    try {
+        const res = await axios.post(shardUrl(shardId) + 'get_block_with_hash',
+            JSON.stringify({ hash_list: [hashHex] }), {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000,
+            responseType: 'text',
+            transformResponse: [(data: any) => {
+                if (typeof data === 'string') {
+                    try { return JSON.parse(data) } catch (_) { return data }
+                }
+                return data
+            }],
+        })
+        const blocks = (res.data as any)?.blocks
+        return Array.isArray(blocks) && blocks.length > 0 ? blocks[0] : null
+    } catch (_) {
+        return null
+    }
+}
+
 // addressArray can be at top level OR inside blockInfo depending on node version
 function getBlockAddrs(block: any): any[] {
     return block.addressArray ?? block.blockInfo?.addressArray ?? []
