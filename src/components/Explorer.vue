@@ -1097,96 +1097,47 @@ function openBlockTxDetail(row: BlockTxRow) {
 }
 
 // ─── open tx drawer from network tx list ──────────────────────────────────────
+// The standalone tx list must show the exact same detail as the block list, so
+// it reuses openBlockTxDetail: fetch the full block, build the row the same way
+// the block list does (addresses / kvChanges grouped by txIndex), locate the
+// clicked tx inside it, and hand that row to openBlockTxDetail.
 async function openNetworkTxDrawer(item: NetworkTxItem) {
-    // /explorer/transactions returns only the tx rows — the drawer's state-change
-    // and KV tables come from the block's addressArray/keyValueArray. Refetch the
-    // full block by hash so the drawer shows exactly what the block list shows.
-    selectedTxItem.value = item.tx ? normalizeExplorerTx(item.tx) : null
-    selectedTxGroup.value = { txIndex: item.txIndex, addresses: [], kvChanges: [] }
-    txDetailDrawerVisible.value = true
+    const txHashHex = String(item.tx?.tx_hash ?? '').replace(/^0x/, '')
+    const hashHex   = String(item.blockHash ?? '').replace(/^0x/, '')
+    let row: BlockTxRow | null = null
 
-    const txHashHex = String(selectedTxItem.value?.txHash ?? '').replace(/^0x/, '')
-    const hashHex = String((item as any).blockHash ?? '').replace(/^0x/, '')
-    if (!hashHex || !txHashHex) return
-
-    txEnrichLoading.value = true
-    try {
-        const full = await getBlockWithHash(item.shardId ?? viewShard.value, hashHex)
-        if (!full) return
-        // The explorer tx rows carry no tx index, so recover it from the block's
-        // own txList by hash. Tx hashes arrive base64 there and as 0x-hex here.
-        const txList: any[] = full?.blockInfo?.txList ?? []
-        const idx = txList.findIndex(t => b64HashToHex(String(t?.txHash ?? '')) === txHashHex)
-        const group = groupedTxs(full).find(g => g.txIndex === (idx >= 0 ? idx : item.txIndex))
-        if (group) selectedTxGroup.value = group
-    } finally {
-        txEnrichLoading.value = false
-    }
-}
-
-/** blockInfo.txList entries already carry every field the drawer needs except
- *  `balance`, which lives on the matching addressArray row. */
-function txItemFromBlockTx(t: any, ctx: NetworkTxItem): TxItem {
-    // txList and addressArray both encode addresses as base64, so decode before
-    // comparing rather than matching the raw strings.
-    const from = b64ToAddrLocal(String(t.from ?? ''))
-    const to = b64ToAddrLocal(String(t.to ?? ''))
-    const own = ctx.addresses.find((a: any) => {
-        const br = b64ToAddrLocal(a.addr ?? '')
-        return br && (br === from || br === to)
-    })
-    return {
-        height:     String(ctx.height),
-        txIndex:    ctx.txIndex,
-        nonce:      String(t.nonce ?? '0'),
-        from,
-        to,
-        amount:     String(t.amount ?? '0'),
-        gasLimit:   String(t.gasLimit ?? '0'),
-        gasUsed:    String(t.gasUsed ?? '0'),
-        gasPrice:   String(t.gasPrice ?? '0'),
-        balance:    String(own?.balance ?? '0'),
-        step:       t.step,
-        status:     t.status,
-        txHash:     b64HashToHex(String(t.txHash ?? '')),
-        uniqueHash: b64HashToHex(String(t.uniqueHash ?? '')),
-        shard:      ctx.shardId,
-    }
-}
-
-// ─── open tx detail drawer (from network tx list — needs enrichment) ──────────
-async function openTxGroupDrawer(txGroup: TxGroup, blockTx?: any) {
-    selectedTxGroup.value = txGroup
-    selectedTxItem.value = null
-    txDetailDrawerVisible.value = true
-
-    // The block's own txList is authoritative and needs no round trip. The RPC
-    // path below is a fallback for callers that only have an address group.
-    if (blockTx) {
-        selectedTxItem.value = txItemFromBlockTx(blockTx, {
-            txIndex: txGroup.txIndex,
-            height: String(selectedBlock.value?.blockInfo?.height ?? '0'),
-            shardId: selectedBlock.value?.shardId ?? viewShard.value,
-            addresses: txGroup.addresses,
-        } as NetworkTxItem)
-        return
-    }
-
-    const height = selectedBlock.value?.blockInfo?.height
-    const shardId = selectedBlock.value?.shardId ?? viewShard.value
-    txEnrichLoading.value = true
-    try {
-        for (const a of txGroup.addresses) {
-            const addr = b64ToAddrLocal(a.addr ?? '')
-            if (!addr) continue
-            const res = await queryAccountTxsOnShard(addr, shardId, 50, 0)
-            if (!res?.transactions?.length) continue
-            const found = res.transactions.find((t: TxItem) => String(t.height) === String(height))
-            if (found) { selectedTxItem.value = found; break }
+    if (hashHex) {
+        txEnrichLoading.value = true
+        try {
+            const full = await getBlockWithHash(item.shardId ?? viewShard.value, hashHex)
+            if (full) {
+                // Same grouping the block list builds for a node-sourced block.
+                const groups = groupedTxs(full)
+                const idx = txHashHex
+                    ? (full.blockInfo?.txList ?? []).findIndex(
+                          (t: any) => b64HashToHex(String(t?.txHash ?? '')) === txHashHex)
+                    : -1
+                const txIndex = idx >= 0 ? idx : item.txIndex
+                const g = groups.find(x => x.txIndex === txIndex)
+                row = {
+                    txIndex,
+                    txItem:    item.tx ? normalizeExplorerTx(item.tx) : null,
+                    addresses: g?.addresses ?? [],
+                    kvChanges: g?.kvChanges ?? [],
+                }
+            }
+        } finally {
+            txEnrichLoading.value = false
         }
-    } finally {
-        txEnrichLoading.value = false
     }
+
+    // Fall back to the list row itself when the block cannot be fetched.
+    openBlockTxDetail(row ?? {
+        txIndex:   item.txIndex,
+        txItem:    item.tx ? normalizeExplorerTx(item.tx) : null,
+        addresses: item.addresses ?? [],
+        kvChanges: item.kvChanges ?? [],
+    })
 }
 
 // ─── open tx detail drawer (from account tx list) ─────────────────────────────
