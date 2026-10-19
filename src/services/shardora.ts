@@ -639,7 +639,7 @@ export async function explorerSearch(
     if (!hex) return []
     try {
         const data = await get<any>(shardId, 'explorer/search', { q: hex, limit })
-        if (data && data.code === 0 && Array.isArray(data.data)) {
+        if (data && data.code === 0 && Array.isArray(data.data) && data.data.length > 0) {
             return (data.data as any[]).map(a => ({
                 address:     a.addr ?? '',
                 balance:     String(a.balance ?? 0),
@@ -655,6 +655,32 @@ export async function explorerSearch(
             }))
         }
     } catch (_) {}
+
+    // Fallback: if the query is a full 40-hex address and the addresses table
+    // returned nothing, try the contracts table directly — a contract registered
+    // via /explorer/contract/update may only exist there.
+    if (hex.length === 40) {
+        try {
+            const cd = await get<any>(shardId, 'explorer/contract', { addr: '0x' + hex })
+            if (cd?.code === 0 && cd.data?.addr) {
+                const c = cd.data
+                return [{
+                    address:     c.addr,
+                    balance:     '0',
+                    nonce:       '0',
+                    shard_id:    c.shard_id ?? shardId,
+                    pool_index:  c.pool_index ?? 0,
+                    type:        0,
+                    is_contract: true,
+                    tx_count:    0,
+                    last_seen:   c.create_timestamp ?? 0,
+                    exact:       true,
+                    _id:         0,
+                }]
+            }
+        } catch (_) {}
+    }
+
     return []
 }
 
