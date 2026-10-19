@@ -931,7 +931,7 @@ export async function explorerGetContracts(
     params: { before_id?: number; limit?: number; is_library?: number; is_clone?: number } = {}
 ): Promise<any> {
     try {
-        return await get<any>(shardId, 'explorer/contracts', { limit: 20, ...params })
+        return await get<any>(shardId, 'explorer/contracts', { limit: 1024, ...params })
     } catch (_) {
         return null
     }

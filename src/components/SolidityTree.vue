@@ -709,7 +709,7 @@ const GetProjectsAndPipelines = async () => {
     // else, where Promise.all would reject the whole load on one bad shard.
     const perShard = await Promise.allSettled(
         SHARDS.map(async (s) => {
-            const resp = await explorerGetContracts(s, { limit: 100 })
+            const resp = await explorerGetContracts(s, { limit: 1024 })
             const items: any[] = Array.isArray(resp?.data) ? resp.data
                 : Array.isArray(resp?.items) ? resp.items
                 : Array.isArray(resp?.data?.items) ? resp.data.items
