@@ -927,7 +927,7 @@ const copyAddress = async (addr: string) => {
 // may not carry a 0x prefix, so match on the hex body rather than the raw string.
 // `shard` is supplied by search hits, which know which shard matched; without it
 // the first shard holding that address wins.
-const useAddress = (addr: string, shard?: number) => {
+const useAddress = async (addr: string, shard?: number) => {
     const want = addr.toLowerCase().replace(/^0x/, '')
     const node = (data.value as any[]).find(n => {
         if (!('' + n.id).startsWith('contract-')) return false
@@ -939,9 +939,48 @@ const useAddress = (addr: string, shard?: number) => {
     if (node) {
         treeRef.value?.setCurrentKey(node.id)
         handleNodeClick({ id: node.id }, null)
-    } else {
-        copyAddress(addr)
+        results_visible.value = false
+        return
     }
+
+    // Contract not yet in the tree (not returned by /explorer/contracts list).
+    // Fetch it directly and inject it into the tree on-the-fly.
+    const targetShards = shard !== undefined ? [shard] : SHARDS
+    let cd: any = null
+    let foundShard = shard
+    for (const s of targetShards) {
+        cd = await explorerGetContract(s, '0x' + want)
+        if (cd) { foundShard = s; break }
+    }
+
+    if (!cd) {
+        ElMessage({ type: 'warning', message: '合约不在链上浏览器索引中' })
+        results_visible.value = false
+        return
+    }
+
+    // Build node the same way GetProjectsAndPipelines does
+    const contractAddr: string = cd.addr || ('0x' + want)
+    const contractShard = Number(cd.shard_id) || foundShard || SHARDS[0]
+    const nodeId = `contract-${contractShard}-${contractAddr}`
+    const srcName = cd.source_code
+        ? (cd.source_code.match(/contract\s+(\w+)/)?.[1] ?? '')
+        : ''
+    const shortAddr = contractAddr.length > 12
+        ? contractAddr.slice(0, 6) + '...' + contractAddr.slice(-4)
+        : (contractAddr || '?')
+    const label = (srcName ? `${srcName} (${shortAddr})` : shortAddr) + ` · S${contractShard}`
+
+    // Find or create the chain-root node
+    const rootNode = (data.value as any[]).find(n => n.id === 'chain-root')
+    if (!chainContractMap.has(nodeId)) {
+        chainContractMap.set(nodeId, cd)
+        appendNode(rootNode ? 'chain-root' : -1, { id: nodeId, text: label, is_project: false, pipe_id: 0 }, false)
+    }
+
+    await nextTick()
+    treeRef.value?.setCurrentKey(nodeId)
+    handleNodeClick({ id: nodeId }, null)
     results_visible.value = false
 }
 
