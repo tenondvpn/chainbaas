@@ -9,7 +9,20 @@ export function useAddrShorten() {
 
   async function copyToClipboard(text) {
     try {
-      await navigator.clipboard.writeText(text)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        // fallback for HTTP (non-secure) context
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      }
       ElMessage.success('Copied to clipboard')
     } catch {
       ElMessage.error('Failed to copy')

@@ -870,7 +870,19 @@ const filterMethod = (query: string, node: TreeNodeData) =>
 
 const copyAddress = async (addr: string) => {
     try {
-        await navigator.clipboard.writeText(addr)
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(addr)
+        } else {
+            const ta = document.createElement('textarea')
+            ta.value = addr
+            ta.style.position = 'fixed'
+            ta.style.opacity = '0'
+            document.body.appendChild(ta)
+            ta.focus()
+            ta.select()
+            document.execCommand('copy')
+            document.body.removeChild(ta)
+        }
         ElMessage({ type: 'success', message: '已复制地址' })
     } catch (e) {
         ElMessage({ type: 'error', message: '复制失败: ' + e })
