@@ -632,7 +632,7 @@ export interface SearchHit {
  */
 export async function explorerSearch(
     q: string,
-    limit = 50,
+    limit = 200,
     shardId = DEFAULT_SHARD,
 ): Promise<SearchHit[]> {
     const hex = q.toLowerCase().replace(/^0x/, '')

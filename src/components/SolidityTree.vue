@@ -851,7 +851,7 @@ const onQueryChanged = (value: string) => {
 }
 
 const runSearch = async () => {
-    hits.value = await explorerSearch(normalisedQuery.value, 50)
+    hits.value = await explorerSearch(normalisedQuery.value, 200)
     searching.value = false
 }
 
