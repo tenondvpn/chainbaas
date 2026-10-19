@@ -929,13 +929,21 @@ const copyAddress = async (addr: string) => {
 // the first shard holding that address wins.
 const useAddress = async (addr: string, shard?: number) => {
     const want = addr.toLowerCase().replace(/^0x/, '')
-    const node = (data.value as any[]).find(n => {
-        if (!('' + n.id).startsWith('contract-')) return false
-        const parts = ('' + n.id).split('-')
-        const nodeAddr = (parts[2] ?? '').toLowerCase().replace(/^0x/, '')
-        if (nodeAddr !== want) return false
-        return shard === undefined || Number(parts[1]) === shard
-    })
+    // findNode recurses into children — contracts live under chain-root, not at top level
+    const nodeId_exact = shard !== undefined ? `contract-${shard}-0x${want}` : null
+    const node = nodeId_exact
+        ? findNode(nodeId_exact, data.value)
+        : (() => {
+            // No shard hint: search all contract nodes recursively
+            const flatten = (nodes: any[]): any[] =>
+                nodes.flatMap(n => [n, ...flatten(n.children ?? [])])
+            return flatten(data.value).find(n => {
+                if (!('' + n.id).startsWith('contract-')) return false
+                const parts = ('' + n.id).split('-')
+                const nodeAddr = (parts[2] ?? '').toLowerCase().replace(/^0x/, '')
+                return nodeAddr === want
+            })
+        })()
     if (node) {
         treeRef.value?.setCurrentKey(node.id)
         handleNodeClick({ id: node.id }, null)
