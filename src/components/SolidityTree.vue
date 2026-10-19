@@ -144,6 +144,7 @@ import { ElMessageBox } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { useEventListener } from '@vueuse/core'
 import { explorerGetContracts, explorerGetContract, deleteContractFromExplorer, explorerSearch, SHARDS } from '../services/shardora'
+import type { SearchHit } from '../services/shardora'
 import { selectedShard, rememberContractShard } from '../services/shardState'
 
 const createSolidity = ref(false)
@@ -851,7 +852,38 @@ const onQueryChanged = (value: string) => {
 }
 
 const runSearch = async () => {
-    hits.value = await explorerSearch(normalisedQuery.value, 200)
+    const q = normalisedQuery.value
+    const hex = q.toLowerCase().replace(/^0x/, '')
+    // Full 40-hex address: query the contracts table directly on every shard,
+    // bypassing the addresses-only /explorer/search index.
+    if (hex.length === 40) {
+        const addr = '0x' + hex
+        const results: SearchHit[] = []
+        await Promise.allSettled(
+            SHARDS.map(async (s) => {
+                const cd = await explorerGetContract(s, addr)
+                if (cd?.addr) {
+                    results.push({
+                        address:     cd.addr,
+                        balance:     '0',
+                        nonce:       '0',
+                        shard_id:    Number(cd.shard_id) || s,
+                        pool_index:  cd.pool_index ?? 0,
+                        type:        0,
+                        is_contract: true,
+                        tx_count:    0,
+                        last_seen:   cd.create_timestamp ?? 0,
+                        exact:       true,
+                        _id:         0,
+                    })
+                }
+            })
+        )
+        hits.value = results
+        searching.value = false
+        return
+    }
+    hits.value = await explorerSearch(q, 200)
     searching.value = false
 }
 
