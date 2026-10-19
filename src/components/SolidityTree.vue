@@ -859,26 +859,27 @@ const runSearch = async () => {
     if (hex.length === 40) {
         const addr = '0x' + hex
         const results: SearchHit[] = []
-        await Promise.allSettled(
-            SHARDS.map(async (s) => {
-                const cd = await explorerGetContract(s, addr)
-                if (cd?.addr) {
-                    results.push({
-                        address:     cd.addr,
-                        balance:     '0',
-                        nonce:       '0',
-                        shard_id:    Number(cd.shard_id) || s,
-                        pool_index:  cd.pool_index ?? 0,
-                        type:        0,
-                        is_contract: true,
-                        tx_count:    0,
-                        last_seen:   cd.create_timestamp ?? 0,
-                        exact:       true,
-                        _id:         0,
-                    })
-                }
-            })
+        const responses = await Promise.allSettled(
+            SHARDS.map(s => explorerGetContract(s, addr))
         )
+        responses.forEach((r, i) => {
+            if (r.status === 'fulfilled' && r.value) {
+                const cd = r.value
+                results.push({
+                    address:     cd.addr || addr,
+                    balance:     '0',
+                    nonce:       '0',
+                    shard_id:    Number(cd.shard_id) || SHARDS[i],
+                    pool_index:  cd.pool_index ?? 0,
+                    type:        0,
+                    is_contract: true,
+                    tx_count:    0,
+                    last_seen:   cd.create_timestamp ?? 0,
+                    exact:       true,
+                    _id:         cd.id ?? 0,
+                })
+            }
+        })
         hits.value = results
         searching.value = false
         return
