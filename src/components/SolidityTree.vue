@@ -944,10 +944,18 @@ const useAddress = async (addr: string, shard?: number) => {
                 return nodeAddr === want
             })
         })()
-    if (node) {
-        treeRef.value?.setCurrentKey(node.id)
-        handleNodeClick({ id: node.id }, null)
+    // Helper: clear search box + tree filter, then highlight the given node id
+    const revealNode = async (nid: string) => {
+        query.value = ''
+        treeRef.value?.filter('')
         results_visible.value = false
+        await nextTick()
+        treeRef.value?.setCurrentKey(nid)
+        handleNodeClick({ id: nid }, null)
+    }
+
+    if (node) {
+        revealNode(node.id)
         return
     }
 
@@ -979,17 +987,12 @@ const useAddress = async (addr: string, shard?: number) => {
         : (contractAddr || '?')
     const label = (srcName ? `${srcName} (${shortAddr})` : shortAddr) + ` · S${contractShard}`
 
-    // Find or create the chain-root node
-    const rootNode = (data.value as any[]).find(n => n.id === 'chain-root')
     if (!chainContractMap.has(nodeId)) {
         chainContractMap.set(nodeId, cd)
-        appendNode(rootNode ? 'chain-root' : -1, { id: nodeId, text: label, is_project: false, pipe_id: 0 }, false)
+        appendNode('chain-root', { id: nodeId, text: label, is_project: false, pipe_id: 0 }, false)
     }
 
-    await nextTick()
-    treeRef.value?.setCurrentKey(nodeId)
-    handleNodeClick({ id: nodeId }, null)
-    results_visible.value = false
+    revealNode(nodeId)
 }
 
 // The transfer form itself lives in SolidityTransfer.vue, rendered in place of
