@@ -710,15 +710,27 @@ const GetProjectsAndPipelines = async () => {
     // else, where Promise.all would reject the whole load on one bad shard.
     const perShard = await Promise.allSettled(
         SHARDS.map(async (s) => {
-            const resp = await explorerGetContracts(s, { limit: 1024 })
-            const items: any[] = Array.isArray(resp?.data) ? resp.data
-                : Array.isArray(resp?.items) ? resp.items
-                : Array.isArray(resp?.data?.items) ? resp.data.items
-                : []
+            // Paginate until has_more=false (old backend caps at 100/page)
+            const all: any[] = []
+            let beforeId = 0
+            for (;;) {
+                const params: any = { limit: 100 }
+                if (beforeId > 0) params.before_id = beforeId
+                const resp = await explorerGetContracts(s, params)
+                const page: any[] = Array.isArray(resp?.data) ? resp.data
+                    : Array.isArray(resp?.items) ? resp.items
+                    : Array.isArray(resp?.data?.items) ? resp.data.items
+                    : []
+                all.push(...page)
+                const hasMore = resp?.has_more ?? resp?.data?.has_more ?? false
+                const nextCursor = resp?.next_cursor ?? resp?.data?.next_cursor ?? 0
+                if (!hasMore || !nextCursor || page.length === 0) break
+                beforeId = nextCursor
+            }
             // A 0 from the node is the column default, not a shard, so it falls
             // back to the shard the list was fetched from. `??` would let it
             // through and every action on that node would target shard 0.
-            return items.map(c => ({ ...c, shard_id: Number(c.shard_id) || s }))
+            return all.map(c => ({ ...c, shard_id: Number(c.shard_id) || s }))
         })
     )
 

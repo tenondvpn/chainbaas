@@ -715,7 +715,7 @@ const contractsLoading = ref(false)
 const contractsHasMore = ref(false)
 const contractsCursor = ref(0)
 const contractsCursorStack = ref<number[]>([])
-const contractsLimit = 1024
+const contractsLimit = 100
 
 // Contract detail drawer
 const contractDetailVisible = ref(false)
