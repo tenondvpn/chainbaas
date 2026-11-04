@@ -32,7 +32,7 @@
                              transactions are queryable. -->
                         <el-select v-model="selectedShard" style="width:130px">
                             <el-option label="Auto (all)" value="auto" />
-                            <el-option v-for="s in VIEW_SHARDS" :key="s" :label="`Shard ${s}${s === ROOT_SHARD ? ' (root)' : ''}`" :value="s" />
+                            <el-option v-for="s in viewShardList" :key="s" :label="`Shard ${s}${s === ROOT_SHARD ? ' (root)' : ''}`" :value="s" />
                         </el-select>
                     </template>
                     <template #append>
@@ -46,7 +46,7 @@
             <div class="shard-view-row">
                 <span class="shard-view-label">分片：</span>
                 <el-radio-group v-model="viewShard" size="small" @change="onViewShardChange">
-                    <el-radio-button v-for="s in VIEW_SHARDS" :key="s" :value="s">
+                    <el-radio-button v-for="s in viewShardList" :key="s" :value="s">
                         Shard {{ s }}{{ s === ROOT_SHARD ? ' (root)' : '' }}
                     </el-radio-button>
                 </el-radio-group>
@@ -618,7 +618,7 @@ import { Search, Loading } from '@element-plus/icons-vue'
 import { useStepType } from './Explorer/composables/useStepType'
 import {
     queryAccount, queryAccountOnShard, queryAccountTxsOnShard,
-    checkNetworkStatus, GENESIS_ACCOUNTS, VIEW_SHARDS, ROOT_SHARD,
+    checkNetworkStatus, GENESIS_ACCOUNTS, VIEW_SHARDS, ROOT_SHARD, getActiveViewShards,
     getLatestNetworkBlocks, getNetworkTransactions, txsFromBlocks,
     getLatestPoolInfo, getBlocks, getBlockWithHash,
     getAllAccounts, explorerGetBlock, explorerGetTx,
@@ -628,6 +628,11 @@ import {
 } from '../services/shardora'
 
 // ─── state ────────────────────────────────────────────────────────────────────
+import { activeProfile } from '../services/nodeRegistry'
+
+// 分片列表响应式：自定义节点激活后跟随更新，模板只用这个
+const viewShardList = computed(() => getActiveViewShards())
+
 const stepType = useStepType
 const query = ref('')
 const selectedShard = ref<number | 'auto'>('auto')
@@ -1350,7 +1355,7 @@ async function search() {
             // ── Block hash or Tx hash ─────────────────────────────────
             const hash = '0x' + q
             const shardsToTry = selectedShard.value === 'auto'
-                ? [viewShard.value, ...VIEW_SHARDS.filter(s => s !== viewShard.value)]
+                ? [viewShard.value, ...viewShardList.value.filter(s => s !== viewShard.value)]
                 : [selectedShard.value as number]
 
             // Try block hash first

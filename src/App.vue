@@ -13,6 +13,19 @@
         <el-tooltip content="Solidity smart contract IDE">
             <el-menu-item index="3" @click="toSolidity">Smart Contract</el-menu-item>
         </el-tooltip>
+        <!-- 节点配置入口：右上角，私钥按钮前 -->
+        <el-menu-item index="7" class="no-underline" style="margin-top:0px">
+            <el-tooltip :content="activeProfile ? `节点: ${activeProfile.name}` : '配置分片首节点'">
+                <el-button
+                    :type="activeProfile ? 'success' : 'info'"
+                    size="small"
+                    :icon="Connection"
+                    style="margin-top:10px;"
+                    @click="nodeSettingsVisible = true">
+                    {{ activeProfile ? activeProfile.name : '节点配置' }}
+                </el-button>
+            </el-tooltip>
+        </el-menu-item>
         <el-menu-item index="8" class="no-underline" style="margin-top:0px">
             <el-popover :visible="pkVisible" placement="bottom" :width="480">
                 <p style="margin:0 0 8px;font-weight:600;">设置私钥 (64位十六进制)</p>
@@ -41,6 +54,7 @@
             </el-tooltip>
         </el-menu-item>
     </el-menu>
+    <NodeSettingsDialog v-model="nodeSettingsVisible" />
     <router-view />
 </template>
 
@@ -53,8 +67,12 @@ import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useDark, useToggle } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import emitter from './components/EventBus'
-import { Key as KeyIcon } from '@element-plus/icons-vue'
+import { Key as KeyIcon, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import NodeSettingsDialog from './components/NodeSettingsDialog.vue'
+import { activeProfile } from './services/nodeRegistry'
+
+const nodeSettingsVisible = ref(false)
 
 const checked1 = ref(true)
 const themeColor = ref(localStorage.getItem('themeColor') || '#5F95FF')

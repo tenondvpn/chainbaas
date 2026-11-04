@@ -49,7 +49,8 @@ export function calcCreateAddress(senderHex: string, nonce: number): string {
     return Array.from(hash.slice(-20)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// Consensus shards, 3-6 (4 nodes each).
+// Consensus shards, 3-6 (4 nodes each) — built-in defaults used when no custom
+// node registry profile is active.
 //
 // Shard 2 is the root congress network (network_utils.h: kRootCongressNetworkId)
 // and does not run transaction consensus, so no tx may ever be addressed to it.
@@ -61,20 +62,38 @@ export const DEFAULT_SHARD = 3
 export const ROOT_SHARD = 2
 
 // Read-only shard set: the consensus shards plus the root congress network.
-//
-// The root shard carries no user transactions, so it must never appear in
-// SHARDS — that set gates sending, account ownership and tx lookup, and a
-// probe of the root shard answers for accounts it merely caches, with a stale
-// nonce. It does serve a full explorer API for its own blocks and system
-// transactions, so browsing it is fine and it is offered here instead.
 export const VIEW_SHARDS = [ROOT_SHARD, ...SHARDS]
 
 export function isRootShard(shardId: number): boolean {
     return shardId === ROOT_SHARD
 }
 
+// ── 动态分片列表（由节点注册表驱动）────────────────────────────────────────────
+//
+// 用户在「分片首节点配置」里激活一套节点集后，这里返回该配置中的实际分片 ID；
+// 若无激活配置，退回硬编码的 SHARDS / VIEW_SHARDS。
+//
+// 注意：activeConsensusShardIds / activeShardIds 在每次调用时都读取 nodeRegistry
+// 的响应式状态，所以切换配置后不需要刷新页面，下一次请求自动走新配置。
+import { activeConsensusShardIds, activeShardIds, nodeUrlForShard } from './nodeRegistry'
+
+export function getActiveShards(): number[] {
+    const ids = activeConsensusShardIds()
+    return ids.length ? ids : SHARDS
+}
+
+export function getActiveViewShards(): number[] {
+    const ids = activeShardIds()
+    if (!ids.length) return VIEW_SHARDS
+    // root congress shard (2) is always first if present in ids
+    const viewIds = ids.includes(ROOT_SHARD) ? ids : [ROOT_SHARD, ...ids]
+    return viewIds
+}
+
 function shardUrl(shardId: number): string {
-    return `/api/shard${shardId}/`
+    // 若节点注册表为该分片提供了直连地址，优先使用；否则走 nginx 代理路径。
+    const custom = nodeUrlForShard(shardId)
+    return custom ? custom + '/' : `/api/shard${shardId}/`
 }
 
 async function post<T = any>(shardId: number, endpoint: string, params: Record<string, any>): Promise<T> {
@@ -147,7 +166,7 @@ export function ownerShardOf(acc: AccountInfo | null | undefined, probedShard: n
  */
 export async function queryAccount(address: string): Promise<AccountInfo | null> {
     const hex = address.toLowerCase().replace(/^0x/, '')
-    for (const shard of SHARDS) {
+    for (const shard of getActiveShards()) {
         try {
             const data = await post(shard, 'query_account', { address: hex })
             if (typeof data === 'object' && data !== null && data.balance !== undefined) {
@@ -268,7 +287,7 @@ export async function waitForBalanceAnyShard(
         const elapsed = () => Math.round((Date.now() - start) / 1000)
         try {
             const results = await Promise.allSettled(
-                SHARDS.map(async (s) => {
+                getActiveShards().map(async (s) => {
                     const acc = await queryAccountOnShard(address, s)
                     return acc ? { ...acc, shard: ownerShardOf(acc, s) } : null
                 })
@@ -334,7 +353,7 @@ export async function queryAccountTxs(
     offset = 0,
 ): Promise<TxListResult | null> {
     const hex = address.toLowerCase().replace(/^0x/, '')
-    for (const shard of SHARDS) {
+    for (const shard of getActiveShards()) {
         try {
             const data = await post<TxListResult>(shard, 'query_account_txs', {
                 address: hex,
@@ -381,7 +400,7 @@ export async function queryAccountTxsOnShard(
 // Pass shardId=null to search all shards; pass a specific shard number to query only that shard.
 export async function queryTxReceipt(txHash: string, shardId: number | null = null): Promise<any | null> {
     const hex = txHash.toLowerCase().replace(/^0x/, '')
-    for (const shard of shardId === null ? SHARDS : [shardId]) {
+    for (const shard of shardId === null ? getActiveShards() : [shardId]) {
         try {
             const data = await post(shard, 'transaction_receipt', { tx_hash: hex })
             if (data && data.status !== undefined) return { ...data, shard }
@@ -905,7 +924,7 @@ export interface ShardStatus {
  *  shard answers the same ping, so it appears alongside 3-6 and a caller that
  *  only cares about tx shards filters on SHARDS. */
 export async function checkNetworkStatus(): Promise<ShardStatus[]> {
-    return Promise.all(VIEW_SHARDS.map(async (shard) => {
+    return Promise.all(getActiveViewShards().map(async (shard) => {
         const t0 = Date.now()
         try {
             // Use batch_query with a dummy address to ping the shard

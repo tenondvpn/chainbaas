@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { SHARDS, queryAccountOnShard, ownerShardOf } from './shardora'
+import { getActiveShards, queryAccountOnShard, ownerShardOf } from './shardora'
 
 // The shard a contract operation runs against is not a user choice: it is wherever
 // the signing account lives. A deploy computes its contract address from the
@@ -55,7 +55,7 @@ export async function resolveShardForAccount(privateKeyHex: string): Promise<num
     }
 
     const results = await Promise.allSettled(
-        SHARDS.map(async (s) => {
+        getActiveShards().map(async (s) => {
             const acc = await queryAccountOnShard(addr, s)
             return acc ? ownerShardOf(acc, s) : null
         })
