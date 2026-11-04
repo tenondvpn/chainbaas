@@ -24,6 +24,7 @@
                     <el-input-number
                         v-model="form.amount"
                         :min="1"
+                        :max="300000000"
                         :step="1000000"
                         size="large"
                         style="width: 100%"

@@ -918,7 +918,7 @@ export async function checkNetworkStatus(): Promise<ShardStatus[]> {
 
 // Known funded genesis accounts (from /data/nodes/s3_1/init_accounts3)
 export const GENESIS_ACCOUNTS: { shard: number; address: string; label: string }[] = [
-    { shard: 3, address: '8c98daf9a6969f5ac82ae6f09928529096585545', label: 'Shard3 Genesis-1 (Faucet)' },
+    { shard: 5, address: '8c98daf9a6969f5ac82ae6f09928529096585545', label: 'Shard5 Genesis-1 (Faucet)' },
     { shard: 3, address: '8cab84fc5124fc5bcbfbf367b0a308d33c2218bf', label: 'Shard3 Genesis-2' },
     { shard: 3, address: '2370a65bce56787bda7bd4c942158df687e1ab23', label: 'Shard3 Genesis-3' },
     { shard: 3, address: '01f47d73c3f206b49075e93c1d0f907be29627c7', label: 'Shard3 Genesis-4' },
@@ -930,15 +930,15 @@ export const GENESIS_ACCOUNTS: { shard: number; address: string; label: string }
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FAUCET_PRIKEY = '0376dc1b7bc5e943c5ff8f756487b1dacbcb233e23def9cd9f0ef75604eafa2d'
-const FAUCET_SHARD = 3
+const FAUCET_SHARD = 5
 
 export async function faucetSend(toAddress: string, amount: number): Promise<{ ok: boolean; msg: string }> {
     const to = toAddress.toLowerCase().replace(/^0x/, '')
     if (to.length !== 40) {
         return { ok: false, msg: '地址格式无效，应为40位十六进制字符串' }
     }
-    if (amount <= 0 || amount > 1_000_000_000) {
-        return { ok: false, msg: '金额超出范围 (1 ~ 1,000,000,000)' }
+    if (amount <= 0 || amount > 300_000_000) {
+        return { ok: false, msg: '金额超出范围 (1 ~ 300,000,000)' }
     }
     return transfer({
         privateKeyHex: FAUCET_PRIKEY,
