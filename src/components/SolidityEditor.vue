@@ -842,7 +842,7 @@ async function callFunction() {
                 const inputByteLen = Math.floor(inputHex.length / 2)
                 const rec: WriteRecord = {
                     seq: ++writeSeq,
-                    op: funcName,
+                    op: '写入',
                     from: fromAddrWrite,
                     timestamp: new Date().toLocaleTimeString(),
                     storageTier: inputByteLen <= 256 ? 'chain' : 'offchain',
