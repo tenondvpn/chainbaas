@@ -65,9 +65,11 @@
                 </el-table-column>
                 <el-table-column label="延迟" width="90" align="center">
                     <template #default="{ $index }">
-                        <span v-if="latencyMs[$index] != null"
-                              :style="{ color: latencyMs[$index] > 5000 ? '#f56c6c' : '#67c23a', fontSize: '12px' }">
-                            {{ latencyMs[$index] > 5000 ? '超时' : latencyMs[$index] + 'ms' }}
+                        <span v-if="testStatus[$index] === 'err' && latencyMs[$index] == null"
+                              style="color:#f56c6c;font-size:12px">超时</span>
+                        <span v-else-if="latencyMs[$index] != null"
+                              :style="{ color: (latencyMs[$index] ?? 0) > 5000 ? '#f56c6c' : '#67c23a', fontSize: '12px' }">
+                            {{ (latencyMs[$index] ?? 0) > 5000 ? '超时' : latencyMs[$index] + 'ms' }}
                         </span>
                     </template>
                 </el-table-column>

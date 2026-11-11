@@ -213,9 +213,13 @@ async function computeResourceDigest(latencyMs, online, shardId) {
     const { Web3 } = await import('web3')
     const w3 = new Web3()
     const payload = `${latencyMs}|${online ? 1 : 0}|${shardId}`
-    const hex = w3.utils.keccak256(payload)
+    const bytes = new TextEncoder().encode(payload)
+    const hex = w3.utils.keccak256(bytes)
     return hex.replace(/^0x/, '').slice(0, 16)
-  } catch { return null }
+  } catch (e) {
+    console.error('keccak256 failed:', e)
+    return null
+  }
 }
 
 async function fetchAll() {
