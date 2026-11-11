@@ -13,12 +13,14 @@
 
             <!-- Shard status -->
             <div class="shard-status-row">
-                <el-tooltip v-for="s in shardStatuses" :key="s.shard"
-                    :content="s.online ? `Shard ${s.shard}: ${s.responseMs}ms` : `Shard ${s.shard}: offline`">
-                    <el-tag :type="s.online ? 'success' : 'danger'" size="small" style="cursor:default">
-                        S{{ s.shard }} {{ s.online ? '●' : '○' }}
-                    </el-tag>
-                </el-tooltip>
+                <div v-for="s in shardStatuses" :key="s.shard" class="shard-status-item">
+                    <el-tooltip :content="s.online ? `Shard ${s.shard}: ${s.responseMs}ms` : `Shard ${s.shard}: offline`">
+                        <el-tag :type="s.online ? 'success' : 'danger'" size="small" style="cursor:default">
+                            S{{ s.shard }} {{ s.online ? '●' : '○' }}
+                        </el-tag>
+                    </el-tooltip>
+                    <div v-if="s.resourceDigest" class="shard-digest">{{ s.resourceDigest }}</div>
+                </div>
                 <el-button size="small" @click="refreshAll" :loading="checkingStatus" style="margin-left:8px">刷新</el-button>
             </div>
 
@@ -821,6 +823,16 @@ function groupedTxs(block: any): TxGroup[] {
 async function checkStatus() {
     checkingStatus.value = true
     const statuses = await checkNetworkStatus()
+    try {
+        const { Web3 } = await import('web3')
+        const w3 = new Web3()
+        for (const s of statuses) {
+            const payload = `${s.responseMs ?? 0}|${s.online ? 1 : 0}|${s.shard}`
+            const bytes = new TextEncoder().encode(payload)
+            const hex = w3.utils.keccak256(bytes)
+            s.resourceDigest = hex.replace(/^0x/, '').slice(0, 16)
+        }
+    } catch (_) {}
     shardStatuses.value = statuses
     networkOnline.value = statuses.some(s => s.online)
     networkChecked.value = true
@@ -1413,7 +1425,9 @@ async function search() {
 .explorer-card { width:100%; max-width:1200px; margin-top:16px; }
 .card-header { display:flex; align-items:center; gap:10px; }
 .title { font-size:18px; font-weight:600; }
-.shard-status-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:4px; }
+.shard-status-row { display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; margin-bottom:4px; }
+.shard-status-item { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.shard-digest { font-size:10px; font-family:monospace; color:var(--el-text-color-secondary); max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .shard-view-row { display:flex; align-items:center; gap:10px; margin:10px 0 4px; }
 .shard-view-label { font-size:13px; color:var(--el-text-color-secondary); white-space:nowrap; }
 .section-header {

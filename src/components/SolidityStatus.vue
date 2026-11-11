@@ -65,6 +65,12 @@
             <el-table v-if="showWriteRecords" :data="writeRecords" size="small" border style="margin-top:4px">
                 <el-table-column label="#" prop="seq" width="45" />
                 <el-table-column label="操作" prop="op" min-width="80" />
+                <el-table-column label="所在分片" width="80" align="center">
+                    <template #default="{ row }">
+                        <span v-if="row.shard != null" style="font-size:12px">{{ row.shard }}</span>
+                        <span v-else style="color:var(--el-text-color-placeholder)">—</span>
+                    </template>
+                </el-table-column>
                 <el-table-column label="发起方" min-width="120">
                     <template #default="{ row }">
                         <span style="font-size:11px">{{ row.from.slice(0,16) }}…</span>
@@ -124,7 +130,7 @@ interface CallResult { funcName: string; status: number; return_value?: string; 
 const lastCallResult = ref<CallResult | null>(null)
 const summaryExpanded = ref<string[]>(['summary'])
 
-interface WriteRecord { seq: number; op: string; from: string; timestamp: string; storageTier: string; txHash: string }
+interface WriteRecord { seq: number; op: string; from: string; timestamp: string; storageTier: string; txHash: string; shard?: number }
 interface QueryResult { funcName: string; result: string; timestamp: string }
 const writeRecords = ref<WriteRecord[]>([])
 const queryResults = ref<QueryResult[]>([])

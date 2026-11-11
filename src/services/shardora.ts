@@ -918,6 +918,7 @@ export interface ShardStatus {
     shard: number
     online: boolean
     responseMs?: number
+    resourceDigest?: string
 }
 
 /** Which shards are reachable, including the root congress network. The root

@@ -284,6 +284,7 @@ async function onTemplateChange(val: string) {
 
 // C-07/C-06/C-10: Write records
 interface WriteRecord {
+    shard?: number
     seq: number
     op: string
     from: string
@@ -850,6 +851,7 @@ async function callFunction() {
                     timestamp: new Date().toLocaleTimeString(),
                     storageTier: inputByteLen <= 256 ? 'chain' : 'offchain',
                     txHash,
+                    shard: writeShard,
                 }
                 writeRecords.value.push(rec)
                 showWriteRecords.value = true
