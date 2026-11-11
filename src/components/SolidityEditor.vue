@@ -1682,7 +1682,24 @@ watch(codeValue, (newValue) => {
     padding: 4px 8px;
     background: var(--el-fill-color-extra-light);
     border-bottom: 1px solid var(--el-border-color-lighter);
-}\n\n.records-panel {\n    border-top: 1px solid var(--el-border-color-lighter);\n    padding: 6px 8px;\n    background: var(--el-bg-color);\n}\n\n.records-panel-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    font-size: 13px;\n    font-weight: 600;\n    color: var(--el-text-color-primary);\n}\n\n.panel-header {
+}
+
+.records-panel {
+    border-top: 1px solid var(--el-border-color-lighter);
+    padding: 6px 8px;
+    background: var(--el-bg-color);
+}
+
+.records-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+}
+
+.panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
