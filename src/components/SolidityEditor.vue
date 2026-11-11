@@ -765,8 +765,10 @@ async function callFunction() {
                         console.error("ABI decode failed:", err.message)
                     }
                     emitter.emit('call_function_solidity_code_res', { status: 0, funcName: form.function, return_value: res_data })
-                    queryResults.value.push({ funcName: form.function, result: res_data, timestamp: new Date().toLocaleTimeString() })
+                    const qr = { funcName: form.function, result: res_data, timestamp: new Date().toLocaleTimeString() }
+                    queryResults.value.push(qr)
                     showQueryResults.value = true
+                    emitter.emit('query_result_created', qr)
                     ElMessage({ type: 'success', message: 'Function call successful' })
                     dialogFormVisible.value = false
                 })
@@ -851,6 +853,7 @@ async function callFunction() {
                 }
                 writeRecords.value.push(rec)
                 showWriteRecords.value = true
+                emitter.emit('write_record_created', rec)
                 // N-01: store digest in metadata (for future use)
                 if (writeDigest.value) {
                     // digest computed reactively; available here as writeDigest.value

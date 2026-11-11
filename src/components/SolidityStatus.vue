@@ -1,5 +1,5 @@
 <template>
-    <div class="solidity-status-root" style="overflow: hidden;">
+    <div class="solidity-status-root" style="overflow-y: auto;">
         <!-- These act on the contract in the editor, which is not on screen while
              the transfer form has the pane. The log area below stays, so transfer
              progress still has somewhere to print. -->
@@ -54,6 +54,54 @@
             </el-collapse-item>
         </el-collapse>
 
+        <!-- C-07/C-06/C-10: Write records table -->
+        <div v-if="writeRecords.length > 0" style="margin-top:6px">
+            <div class="records-panel-hdr">
+                <span>写入记录 ({{ writeRecords.length }})</span>
+                <div>
+                    <el-button size="small" link @click="showWriteRecords = !showWriteRecords">{{ showWriteRecords ? '收起' : '展开' }}</el-button>
+                </div>
+            </div>
+            <el-table v-if="showWriteRecords" :data="writeRecords" size="small" border style="margin-top:4px">
+                <el-table-column label="#" prop="seq" width="45" />
+                <el-table-column label="操作" prop="op" min-width="80" />
+                <el-table-column label="发起方" min-width="120">
+                    <template #default="{ row }">
+                        <span style="font-size:11px">{{ row.from.slice(0,16) }}…</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="时间" prop="timestamp" min-width="100" />
+                <el-table-column label="存储层" width="90" align="center">
+                    <template #default="{ row }">
+                        <el-tag :type="row.storageTier === 'chain' ? 'primary' : 'info'" size="small">
+                            {{ row.storageTier === 'chain' ? '链上' : '链下摘要' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="TxHash" min-width="110">
+                    <template #default="{ row }">
+                        <span style="font-size:11px">{{ row.txHash ? row.txHash.slice(0,16) + '…' : '—' }}</span>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <!-- C-09: Query results with CSV export -->
+        <div v-if="queryResults.length > 0" style="margin-top:6px">
+            <div class="records-panel-hdr">
+                <span>查询结果 ({{ queryResults.length }})</span>
+                <div>
+                    <el-button size="small" type="primary" plain @click="exportQueryCsv">导出 CSV</el-button>
+                    <el-button size="small" link style="margin-left:4px" @click="showQueryResults = !showQueryResults">{{ showQueryResults ? '收起' : '展开' }}</el-button>
+                </div>
+            </div>
+            <el-table v-if="showQueryResults" :data="queryResults" size="small" border style="margin-top:4px">
+                <el-table-column label="函数" prop="funcName" width="120" />
+                <el-table-column label="结果" prop="result" min-width="180" />
+                <el-table-column label="时间" prop="timestamp" width="100" />
+            </el-table>
+        </div>
+
         <pre ref="logArea" id="solidity_editor_status" class="log-area" v-html="textarea"></pre>
     </div>
 </template>
@@ -75,6 +123,26 @@ const privateKey = ref(localStorage.getItem('solidity_private_key') ?? '')
 interface CallResult { funcName: string; status: number; return_value?: string; txHash?: string; msg?: string; timestamp: string }
 const lastCallResult = ref<CallResult | null>(null)
 const summaryExpanded = ref<string[]>(['summary'])
+
+interface WriteRecord { seq: number; op: string; from: string; timestamp: string; storageTier: string; txHash: string }
+interface QueryResult { funcName: string; result: string; timestamp: string }
+const writeRecords = ref<WriteRecord[]>([])
+const queryResults = ref<QueryResult[]>([])
+const showWriteRecords = ref(true)
+const showQueryResults = ref(true)
+
+function exportQueryCsv() {
+    const shortAddr = contract_address.value ? contract_address.value.replace(/^0x/, '').slice(0, 8) : 'unknown'
+    const date = new Date().toISOString().slice(0, 10)
+    const filename = `query_${shortAddr}_${date}.csv`
+    const rows = [['函数', '结果', '时间'], ...queryResults.value.map(r => [r.funcName, r.result, r.timestamp])]
+    const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+}
 const logArea = ref<HTMLElement | null>(null)
 
 function scrollToBottom() {
@@ -305,6 +373,8 @@ emitter.off('call_function_solidity_code_res', null);
 emitter.off('solidity_status_log', null);
 emitter.off('update_soldity_status_height', null);
 emitter.off('transfer_mode_changed', null);
+emitter.off('write_record_created', null);
+emitter.off('query_result_created', null);
 }
 
 const emitterOn = () => {
@@ -363,6 +433,16 @@ emitter.on('update_soldity_status_height', (height: number | string) => {
     }
 });
 
+emitter.on('write_record_created', (rec: any) => {
+    writeRecords.value.push(rec)
+    showWriteRecords.value = true
+})
+
+emitter.on('query_result_created', (qr: any) => {
+    queryResults.value.push(qr)
+    showQueryResults.value = true
+})
+
 emitter.on('call_function_solidity_code_res', (data) => {
     const sep = '\n------------------------\n'
     const name = data.funcName ?? 'Call'
@@ -386,6 +466,16 @@ emitter.on('call_function_solidity_code_res', (data) => {
 </script>
 
 <style scoped>
+.records-panel-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    padding: 2px 0;
+}
+
 .summary-body {
     font-size: 12px;
     padding: 6px 8px;
