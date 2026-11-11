@@ -19,50 +19,51 @@
         <div class="editor-wrapper" ref="editorContainer">
             <div ref="editorElement" class="code-editor"></div>
         </div>
-        <!-- C-07/C-06/C-10: Write records table -->
-        <div v-if="writeRecords.length > 0" class="records-panel">
-            <div class="records-panel-header">
-                <span>写入记录 ({{ writeRecords.length }})</span>
-                <el-button size="small" link @click="showWriteRecords = !showWriteRecords">{{ showWriteRecords ? '收起' : '展开' }}</el-button>
-            </div>
-            <el-table v-if="showWriteRecords" :data="writeRecords" size="small" border style="margin-top:4px">
-                <el-table-column label="#" prop="seq" width="45" />
-                <el-table-column label="操作" prop="op" min-width="100" />
-                <el-table-column label="发起方" min-width="130">
-                    <template #default="{ row }">
-                        <span style="font-size:11px">{{ row.from.slice(0,16) }}…</span>
-                    </template>
-                </el-table-column>
-                <el-table-column label="时间" prop="timestamp" min-width="130" />
-                <el-table-column label="存储层" width="90" align="center">
-                    <template #default="{ row }">
-                        <el-tag :type="row.storageTier === 'chain' ? 'primary' : 'info'" size="small">
-                            {{ row.storageTier === 'chain' ? '链上' : '链下摘要' }}
-                        </el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column label="TxHash" min-width="120">
-                    <template #default="{ row }">
-                        <span style="font-size:11px">{{ row.txHash ? row.txHash.slice(0,16) + '…' : '—' }}</span>
-                    </template>
-                </el-table-column>
-            </el-table>
+    </div>
+
+    <!-- C-07/C-06/C-10: Write records table (outside editor-container to avoid overflow:hidden clipping) -->
+    <div v-if="writeRecords.length > 0" class="records-panel">
+        <div class="records-panel-header">
+            <span>写入记录 ({{ writeRecords.length }})</span>
+            <el-button size="small" link @click="showWriteRecords = !showWriteRecords">{{ showWriteRecords ? '收起' : '展开' }}</el-button>
         </div>
-        <!-- C-09: Query results with CSV export -->
-        <div v-if="queryResults.length > 0" class="records-panel">
-            <div class="records-panel-header">
-                <span>查询结果 ({{ queryResults.length }})</span>
-                <div>
-                    <el-button size="small" type="primary" plain @click="exportQueryCsv">导出 CSV</el-button>
-                    <el-button size="small" link style="margin-left:4px" @click="showQueryResults = !showQueryResults">{{ showQueryResults ? '收起' : '展开' }}</el-button>
-                </div>
+        <el-table v-if="showWriteRecords" :data="writeRecords" size="small" border style="margin-top:4px">
+            <el-table-column label="#" prop="seq" width="45" />
+            <el-table-column label="操作" prop="op" min-width="100" />
+            <el-table-column label="发起方" min-width="130">
+                <template #default="{ row }">
+                    <span style="font-size:11px">{{ row.from.slice(0,16) }}…</span>
+                </template>
+            </el-table-column>
+            <el-table-column label="时间" prop="timestamp" min-width="130" />
+            <el-table-column label="存储层" width="90" align="center">
+                <template #default="{ row }">
+                    <el-tag :type="row.storageTier === 'chain' ? 'primary' : 'info'" size="small">
+                        {{ row.storageTier === 'chain' ? '链上' : '链下摘要' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="TxHash" min-width="120">
+                <template #default="{ row }">
+                    <span style="font-size:11px">{{ row.txHash ? row.txHash.slice(0,16) + '…' : '—' }}</span>
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+    <!-- C-09: Query results with CSV export -->
+    <div v-if="queryResults.length > 0" class="records-panel">
+        <div class="records-panel-header">
+            <span>查询结果 ({{ queryResults.length }})</span>
+            <div>
+                <el-button size="small" type="primary" plain @click="exportQueryCsv">导出 CSV</el-button>
+                <el-button size="small" link style="margin-left:4px" @click="showQueryResults = !showQueryResults">{{ showQueryResults ? '收起' : '展开' }}</el-button>
             </div>
-            <el-table v-if="showQueryResults" :data="queryResults" size="small" border style="margin-top:4px">
-                <el-table-column label="函数" prop="funcName" width="130" />
-                <el-table-column label="结果" prop="result" min-width="200" />
-                <el-table-column label="时间" prop="timestamp" width="130" />
-            </el-table>
         </div>
+        <el-table v-if="showQueryResults" :data="queryResults" size="small" border style="margin-top:4px">
+            <el-table-column label="函数" prop="funcName" width="130" />
+            <el-table-column label="结果" prop="result" min-width="200" />
+            <el-table-column label="时间" prop="timestamp" width="130" />
+        </el-table>
     </div>
 
     <el-dialog v-model="dialogFormVisible" :title=dialogTitle width="500">
