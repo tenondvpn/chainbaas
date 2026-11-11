@@ -47,6 +47,12 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="资源摘要" width="160">
+          <template #default="{ row }">
+            <span v-if="row.resourceDigest" style="font-size:11px;font-family:monospace;color:var(--el-text-color-secondary)">{{ row.resourceDigest }}</span>
+            <span v-else style="font-size:11px;color:var(--el-text-color-placeholder)">—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </template>
 
@@ -202,6 +208,16 @@ const aggregate = computed(() => {
   }
 })
 
+async function computeResourceDigest(latencyMs, online, shardId) {
+  try {
+    const { Web3 } = await import('web3')
+    const w3 = new Web3()
+    const payload = `${latencyMs}|${online ? 1 : 0}|${shardId}`
+    const hex = w3.utils.keccak256(payload)
+    return hex.replace(/^0x/, '').slice(0, 16)
+  } catch { return null }
+}
+
 async function fetchAll() {
   loading.value = true
   shardResults.value = []
@@ -209,14 +225,29 @@ async function fetchAll() {
   if (!list.length) { loading.value = false; return }
 
   const results = await Promise.allSettled(
-    list.map(s => getChainInfo(s.url || '').then(res => ({
-      name: s.name,
-      networkId: s.networkId,
-      ok: res?.code === 0,
-      total_blocks: res?.data?.total_blocks ?? null,
-      total_txs: res?.data?.total_txs ?? null,
-      synced_height: res?.data?.synced_height ?? null,
-    })).catch(() => ({ name: s.name, networkId: s.networkId, ok: false, total_blocks: null, total_txs: null, synced_height: null })))
+    list.map(async s => {
+      const t0 = Date.now()
+      try {
+        const res = await getChainInfo(s.url || '')
+        const latencyMs = Date.now() - t0
+        const ok = res?.code === 0
+        const digest = await computeResourceDigest(latencyMs, ok, s.networkId)
+        return {
+          name: s.name,
+          networkId: s.networkId,
+          ok,
+          total_blocks: res?.data?.total_blocks ?? null,
+          total_txs: res?.data?.total_txs ?? null,
+          synced_height: res?.data?.synced_height ?? null,
+          latencyMs,
+          resourceDigest: digest,
+        }
+      } catch {
+        const latencyMs = Date.now() - t0
+        const digest = await computeResourceDigest(latencyMs, false, s.networkId)
+        return { name: s.name, networkId: s.networkId, ok: false, total_blocks: null, total_txs: null, synced_height: null, latencyMs, resourceDigest: digest }
+      }
+    })
   )
   shardResults.value = results.map(r => r.status === 'fulfilled' ? r.value : { ok: false })
   loading.value = false

@@ -8,8 +8,60 @@
             enable Preset GAS and function calls — it is kept for this session only and
             is not written back to the contract.
         </div>
+        <!-- N-02: Contract template picker -->
+        <div class="template-bar">
+            <span style="font-size:12px;color:var(--el-text-color-secondary);margin-right:8px">模板:</span>
+            <el-select v-model="selectedTemplate" size="small" placeholder="选择合约模板" style="width:140px" @change="onTemplateChange">
+                <el-option label="键值存储" value="kv" />
+                <el-option label="计数器" value="counter" />
+            </el-select>
+        </div>
         <div class="editor-wrapper" ref="editorContainer">
             <div ref="editorElement" class="code-editor"></div>
+        </div>
+        <!-- C-07/C-06/C-10: Write records table -->
+        <div v-if="writeRecords.length > 0" class="records-panel">
+            <div class="records-panel-header">
+                <span>写入记录 ({{ writeRecords.length }})</span>
+                <el-button size="small" link @click="showWriteRecords = !showWriteRecords">{{ showWriteRecords ? '收起' : '展开' }}</el-button>
+            </div>
+            <el-table v-if="showWriteRecords" :data="writeRecords" size="small" border style="margin-top:4px">
+                <el-table-column label="#" prop="seq" width="45" />
+                <el-table-column label="操作" prop="op" min-width="100" />
+                <el-table-column label="发起方" min-width="130">
+                    <template #default="{ row }">
+                        <span style="font-size:11px">{{ row.from.slice(0,16) }}…</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="时间" prop="timestamp" min-width="130" />
+                <el-table-column label="存储层" width="90" align="center">
+                    <template #default="{ row }">
+                        <el-tag :type="row.storageTier === 'chain' ? 'primary' : 'info'" size="small">
+                            {{ row.storageTier === 'chain' ? '链上' : '链下摘要' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="TxHash" min-width="120">
+                    <template #default="{ row }">
+                        <span style="font-size:11px">{{ row.txHash ? row.txHash.slice(0,16) + '…' : '—' }}</span>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!-- C-09: Query results with CSV export -->
+        <div v-if="queryResults.length > 0" class="records-panel">
+            <div class="records-panel-header">
+                <span>查询结果 ({{ queryResults.length }})</span>
+                <div>
+                    <el-button size="small" type="primary" plain @click="exportQueryCsv">导出 CSV</el-button>
+                    <el-button size="small" link style="margin-left:4px" @click="showQueryResults = !showQueryResults">{{ showQueryResults ? '收起' : '展开' }}</el-button>
+                </div>
+            </div>
+            <el-table v-if="showQueryResults" :data="queryResults" size="small" border style="margin-top:4px">
+                <el-table-column label="函数" prop="funcName" width="130" />
+                <el-table-column label="结果" prop="result" min-width="200" />
+                <el-table-column label="时间" prop="timestamp" width="130" />
+            </el-table>
         </div>
     </div>
 
@@ -79,6 +131,17 @@
                     </el-col>
                 </el-row>
             </el-form-item>
+            <!-- N-01: SHA-256 digest preview for write functions -->
+            <el-form-item v-if="not_constructer && isWriteFunction && writeDigest" style="margin-top:4px">
+                <el-row :gutter="37">
+                    <el-col :span="7" style="padding: 0px; width: 200px; padding-left: 18px;">
+                        <el-text class="mx-1" type="info">SHA-256</el-text>
+                    </el-col>
+                    <el-col :span="15" style="padding: 0px;">
+                        <el-text type="secondary" style="font-size:11px;word-break:break-all">{{ writeDigest }}</el-text>
+                    </el-col>
+                </el-row>
+            </el-form-item>
         </el-form>
         <template #footer>
             <div class="dialog-footer">
@@ -102,7 +165,7 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { solidity } from '@replit/codemirror-lang-solidity';
 import { lineNumbers } from "@codemirror/view";
 import emitter from './EventBus'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDark } from "@vueuse/core";
 import {
     deployContractDirect,
@@ -171,6 +234,104 @@ const form = reactive({
     args: [],
     function: '',
 })
+
+// N-02: Contract templates
+const CONTRACT_TEMPLATES: Record<string, string> = {
+    kv: `// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
+
+contract KeyValueStore {
+    mapping(string => string) private store;
+
+    function set(string calldata key, string calldata value) external {
+        store[key] = value;
+    }
+
+    function get(string calldata key) external view returns (string memory) {
+        return store[key];
+    }
+}`,
+    counter: `// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 private count = 0;
+
+    function increment() external { count += 1; }
+    function decrement() external { require(count > 0, "underflow"); count -= 1; }
+    function getCount() external view returns (uint256) { return count; }
+}`,
+}
+const selectedTemplate = ref('')
+
+async function onTemplateChange(val: string) {
+    if (!val) return
+    const tpl = CONTRACT_TEMPLATES[val]
+    if (!tpl) return
+    const defaultCode = `// SPDX-License-Identifier: GPL-3.0\npragma solidity >=0.7.0 <0.9.0;\n\n`
+    if (codeValue.value.trim() && codeValue.value.trim() !== defaultCode.trim()) {
+        try {
+            await ElMessageBox.confirm('替换当前编辑器内容？', '应用模板', { type: 'warning' })
+        } catch { selectedTemplate.value = ''; return }
+    }
+    codeValue.value = tpl
+    if (editorView.value) {
+        editorView.value.dispatch({ changes: { from: 0, to: editorView.value.state.doc.length, insert: tpl } })
+    }
+    selectedTemplate.value = ''
+}
+
+// C-07/C-06/C-10: Write records
+interface WriteRecord {
+    seq: number
+    op: string
+    from: string
+    timestamp: string
+    storageTier: 'chain' | 'offchain'
+    txHash: string
+}
+const writeRecords = ref<WriteRecord[]>([])
+const showWriteRecords = ref(false)
+let writeSeq = 0
+
+// C-09: Query results
+interface QueryResult { funcName: string; result: string; timestamp: string }
+const queryResults = ref<QueryResult[]>([])
+const showQueryResults = ref(false)
+
+function exportQueryCsv() {
+    const shortAddr = contractAddress.value ? contractAddress.value.replace(/^0x/, '').slice(0, 8) : 'unknown'
+    const date = new Date().toISOString().slice(0, 10)
+    const filename = `query_${shortAddr}_${date}.csv`
+    const rows = [['函数', '结果', '时间'], ...queryResults.value.map(r => [r.funcName, r.result, r.timestamp])]
+    const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+}
+
+// N-01: SHA-256 digest preview
+const writeDigest = ref('')
+const isWriteFunction = computed(() => {
+    if (!form.function || !abiJson.value) return false
+    const fn = (abiJson.value as any[]).find(i => i.type === 'function' && i.name === form.function)
+    return fn ? fn.stateMutability !== 'view' && fn.stateMutability !== 'pure' : false
+})
+
+async function computeWriteDigest() {
+    const payload = form.args.map((a: any) => a.value).join('|')
+    if (!payload.trim()) { writeDigest.value = ''; return }
+    try {
+        const enc = new TextEncoder().encode(payload)
+        const buf = await crypto.subtle.digest('SHA-256', enc)
+        writeDigest.value = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+    } catch { writeDigest.value = '' }
+}
+
+watch(() => form.args, () => { if (isWriteFunction.value) computeWriteDigest() }, { deep: true })
+watch(() => form.function, () => { writeDigest.value = '' })
 
 const getTimestamp = () => {
     return Math.floor(new Date().getTime() / 1000)
@@ -603,6 +764,8 @@ async function callFunction() {
                         console.error("ABI decode failed:", err.message)
                     }
                     emitter.emit('call_function_solidity_code_res', { status: 0, funcName: form.function, return_value: res_data })
+                    queryResults.value.push({ funcName: form.function, result: res_data, timestamp: new Date().toLocaleTimeString() })
+                    showQueryResults.value = true
                     ElMessage({ type: 'success', message: 'Function call successful' })
                     dialogFormVisible.value = false
                 })
@@ -675,6 +838,22 @@ async function callFunction() {
                 })
                 // Poll receipt to confirm actual on-chain result
                 const funcName = form.function
+                // C-06/C-07/C-10: record write entry immediately on submit
+                const inputByteLen = Math.floor(inputHex.length / 2)
+                const rec: WriteRecord = {
+                    seq: ++writeSeq,
+                    op: funcName,
+                    from: fromAddrWrite,
+                    timestamp: new Date().toLocaleTimeString(),
+                    storageTier: inputByteLen <= 256 ? 'chain' : 'offchain',
+                    txHash,
+                }
+                writeRecords.value.push(rec)
+                showWriteRecords.value = true
+                // N-01: store digest in metadata (for future use)
+                if (writeDigest.value) {
+                    // digest computed reactively; available here as writeDigest.value
+                }
                 pollTxResult(writeShard, txHash, 60000, (attempt, elapsed) => {
                     emitter.emit('deploy_progress', `[${elapsed}s] ${funcName}: waiting for confirmation (attempt ${attempt})`)
                 }).then(pollResult => {
@@ -1497,7 +1676,13 @@ watch(codeValue, (newValue) => {
     background: #f8d7da;
 }
 
-.panel-header {
+.template-bar {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: var(--el-fill-color-extra-light);
+    border-bottom: 1px solid var(--el-border-color-lighter);
+}\n\n.records-panel {\n    border-top: 1px solid var(--el-border-color-lighter);\n    padding: 6px 8px;\n    background: var(--el-bg-color);\n}\n\n.records-panel-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    font-size: 13px;\n    font-weight: 600;\n    color: var(--el-text-color-primary);\n}\n\n.panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;

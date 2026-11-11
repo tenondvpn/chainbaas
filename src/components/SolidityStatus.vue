@@ -34,6 +34,26 @@
 
         <el-tag v-if="contract_address && !transfer_mode" type="success" style="margin-top: 5px;float: right;">{{ contract_address }}</el-tag>
 
+        <!-- C-04: Execution summary panel -->
+        <el-collapse v-if="lastCallResult" v-model="summaryExpanded" style="margin-top:6px;border-radius:4px;overflow:hidden">
+            <el-collapse-item name="summary">
+                <template #title>
+                    <span style="font-size:12px;font-weight:600">
+                        执行摘要 — {{ lastCallResult.funcName }}
+                        <el-tag :type="lastCallResult.status === 0 ? 'success' : 'danger'" size="small" style="margin-left:6px">
+                            {{ lastCallResult.status === 0 ? '成功' : '失败' }}
+                        </el-tag>
+                    </span>
+                </template>
+                <div class="summary-body">
+                    <div v-if="lastCallResult.return_value !== undefined"><strong>返回值:</strong><pre class="summary-pre">{{ lastCallResult.return_value }}</pre></div>
+                    <div v-if="lastCallResult.txHash"><strong>TxHash:</strong> <code>{{ lastCallResult.txHash }}</code></div>
+                    <div v-if="lastCallResult.msg"><strong>消息:</strong> {{ lastCallResult.msg }}</div>
+                    <div><strong>时间:</strong> {{ lastCallResult.timestamp }}</div>
+                </div>
+            </el-collapse-item>
+        </el-collapse>
+
         <pre ref="logArea" id="solidity_editor_status" class="log-area" v-html="textarea"></pre>
     </div>
 </template>
@@ -51,6 +71,10 @@ import { getKeypair } from '../services/signing'
 const textarea = ref('')
 const contract_address = ref('')
 const privateKey = ref(localStorage.getItem('solidity_private_key') ?? '')
+
+interface CallResult { funcName: string; status: number; return_value?: string; txHash?: string; msg?: string; timestamp: string }
+const lastCallResult = ref<CallResult | null>(null)
+const summaryExpanded = ref<string[]>(['summary'])
 const logArea = ref<HTMLElement | null>(null)
 
 function scrollToBottom() {
@@ -348,16 +372,36 @@ emitter.on('call_function_solidity_code_res', (data) => {
         } else {
             appendLog(sep + `[✓] ${name}: ${data.msg ?? 'OK'}`)
         }
+        lastCallResult.value = { funcName: name, status: 0, return_value: data.return_value, txHash: data.txHash, msg: data.msg, timestamp: new Date().toLocaleTimeString() }
+        summaryExpanded.value = ['summary']
     } else if (data.status === 2) {
         appendLog(sep + `[${name}] ${data.msg}`)
     } else {
         appendLog(sep + `${name} FAILED: ${data.msg ?? 'unknown error'}`)
+        lastCallResult.value = { funcName: name, status: 1, txHash: data.txHash, msg: data.msg, timestamp: new Date().toLocaleTimeString() }
+        summaryExpanded.value = ['summary']
     }
 });
 }
 </script>
 
 <style scoped>
+.summary-body {
+    font-size: 12px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summary-pre {
+    display: inline;
+    margin: 0;
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 .log-area {
     width: 100%;
     box-sizing: border-box;

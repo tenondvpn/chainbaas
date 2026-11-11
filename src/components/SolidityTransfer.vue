@@ -6,6 +6,10 @@
                     <el-input v-model="senderAddr" readonly placeholder="未设置私钥" />
                     <div v-if="senderBalance !== null" class="field-hint">余额: {{ senderBalance }}</div>
                 </el-form-item>
+                <el-form-item label="所在分片">
+                    <el-tag v-if="resolvedShard !== null" type="info" size="small">分片 {{ resolvedShard }}</el-tag>
+                    <span v-else class="field-hint">—</span>
+                </el-form-item>
                 <el-form-item label="接收方 To">
                     <el-input v-model="transferForm.to" placeholder="20字节账户地址（40位hex，可省略0x）" />
                 </el-form-item>
@@ -20,22 +24,94 @@
                 <el-button type="primary" :loading="transferWaiting" :disabled="!transferForm.to.trim()"
                     @click="doTransfer">发送</el-button>
             </div>
+
+            <!-- C-11: 转账确认追踪 -->
+            <div v-if="confirmRecord" class="confirm-track">
+                <el-divider />
+                <div class="confirm-header">
+                    <span>转账追踪</span>
+                    <el-tag :type="confirmRecord.status === 'confirmed' ? 'success' : confirmRecord.status === 'failed' ? 'danger' : 'warning'" size="small">
+                        {{ confirmRecord.status === 'confirmed' ? '已确认' : confirmRecord.status === 'failed' ? '失败' : '等待中' }}
+                    </el-tag>
+                </div>
+                <div class="confirm-info">
+                    <div>TxHash: <code>{{ confirmRecord.txHash }}</code></div>
+                    <div>分片: {{ confirmRecord.shard }}</div>
+                    <div>时间: {{ confirmRecord.submittedAt }}</div>
+                    <div v-if="confirmRecord.status === 'pending'">
+                        <el-progress :percentage="Math.round((60 - confirmCountdown) / 60 * 100)" :stroke-width="8" />
+                        <span class="field-hint">{{ confirmCountdown }}s 后自动查询</span>
+                        <el-button size="small" type="primary" plain style="margin-left:8px" @click="queryConfirmNow">立即查询</el-button>
+                    </div>
+                    <div v-if="confirmRecord.confirmedAt">确认时间: {{ confirmRecord.confirmedAt }}</div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import emitter from './EventBus';
-import { transfer, pollTxResult, queryAccountOnShard, waitForBalanceAnyShard } from '../services/shardora';
+import { transfer, pollTxResult, queryAccountOnShard, waitForBalanceAnyShard, queryTxReceipt } from '../services/shardora';
 import { resolveShardForAccount } from '../services/shardState';
 import { getKeypair } from '../services/signing';
 
 const transferWaiting = ref(false)
 const senderBalance = ref<string | null>(null)
 const senderAddr = ref('')
+const resolvedShard = ref<number | null>(null)
 const transferForm = ref({ to: '', amount: 1000000, gasLimit: 999999 })
+
+interface ConfirmRecord {
+    txHash: string
+    shard: number
+    submittedAt: string
+    status: 'pending' | 'confirmed' | 'failed'
+    confirmedAt?: string
+}
+const confirmRecord = ref<ConfirmRecord | null>(null)
+const confirmCountdown = ref(60)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+function startConfirmCountdown(txHash: string, shard: number) {
+    if (countdownTimer) clearInterval(countdownTimer)
+    confirmCountdown.value = 60
+    confirmRecord.value = {
+        txHash,
+        shard,
+        submittedAt: new Date().toLocaleTimeString(),
+        status: 'pending',
+    }
+    countdownTimer = setInterval(async () => {
+        confirmCountdown.value -= 1
+        if (confirmCountdown.value <= 0) {
+            clearInterval(countdownTimer!)
+            countdownTimer = null
+            await queryConfirmNow()
+        }
+    }, 1000)
+}
+
+async function queryConfirmNow() {
+    if (!confirmRecord.value || confirmRecord.value.status !== 'pending') return
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
+    try {
+        const receipt = await queryTxReceipt(confirmRecord.value.txHash, confirmRecord.value.shard)
+        if (receipt && receipt.status === 0) {
+            confirmRecord.value = { ...confirmRecord.value, status: 'confirmed', confirmedAt: new Date().toLocaleTimeString() }
+            ElMessage.success('转账已上链确认')
+        } else {
+            confirmRecord.value = { ...confirmRecord.value, status: 'failed', confirmedAt: new Date().toLocaleTimeString() }
+            ElMessage.error('转账未确认或失败')
+        }
+    } catch {
+        confirmRecord.value = { ...confirmRecord.value, status: 'failed', confirmedAt: new Date().toLocaleTimeString() }
+    }
+}
+
+onUnmounted(() => { if (countdownTimer) clearInterval(countdownTimer) })
 
 const statusLog = (msg: string) => {
     emitter.emit('solidity_status_log', msg)
@@ -103,6 +179,7 @@ const doTransfer = async () => {
         ElMessage({ type: 'error', message: '账户不存在于任何分片，无法转账' })
         return
     }
+    resolvedShard.value = shard
 
     statusLog(sep +
         `[Transfer] Submitting transfer tx...` +
@@ -141,6 +218,9 @@ const doTransfer = async () => {
     statusLog(`\n[Transfer] Submit accepted ✓\n  TxHash: ${txHash}`)
     ElMessage({ type: 'info', message: '转账已提交，等待确认...' })
 
+    // C-11: start 60s confirmation tracking countdown
+    startConfirmCountdown(txHash, shard)
+
     // ── Stage 2: poll the receipt until it is final ──
     const pollResult = await pollTxResult(shard, txHash, 60000, (attempt, elapsed) => {
         statusLog(`\n[${elapsed}s] Transfer: waiting (attempt ${attempt})`)
@@ -148,11 +228,19 @@ const doTransfer = async () => {
 
     if (!pollResult.ok) {
         transferWaiting.value = false
+        if (confirmRecord.value?.status === 'pending') {
+            confirmRecord.value = { ...confirmRecord.value, status: 'failed', confirmedAt: new Date().toLocaleTimeString() }
+            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
+        }
         statusLog(`\n[Transfer] Tx FAILED: ${pollResult.reason ?? 'unknown'}`)
         ElMessage({ type: 'error', message: '转账失败: ' + (pollResult.reason ?? 'unknown') })
         return
     }
 
+    if (confirmRecord.value?.status === 'pending') {
+        confirmRecord.value = { ...confirmRecord.value, status: 'confirmed', confirmedAt: new Date().toLocaleTimeString() }
+        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
+    }
     statusLog(`\n[Transfer] Tx confirmed! ✓`)
 
     // ── Stage 3: read both balances back ──
@@ -237,5 +325,33 @@ const doTransfer = async () => {
     color: var(--el-text-color-secondary);
     line-height: 1.4;
     margin-top: 2px;
+}
+
+.confirm-track {
+    margin-top: 8px;
+    padding: 12px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+    background: var(--el-fill-color-extra-light);
+}
+
+.confirm-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.confirm-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.confirm-info code {
+    font-size: 11px;
+    word-break: break-all;
 }
 </style>

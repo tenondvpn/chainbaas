@@ -63,6 +63,14 @@
                         </el-icon>
                     </template>
                 </el-table-column>
+                <el-table-column label="延迟" width="90" align="center">
+                    <template #default="{ $index }">
+                        <span v-if="latencyMs[$index] != null"
+                              :style="{ color: latencyMs[$index] > 5000 ? '#f56c6c' : '#67c23a', fontSize: '12px' }">
+                            {{ latencyMs[$index] > 5000 ? '超时' : latencyMs[$index] + 'ms' }}
+                        </span>
+                    </template>
+                </el-table-column>
                 <el-table-column label="操作" width="140" align="center">
                     <template #default="{ $index }">
                         <el-button link size="small" @click="doTestNode($index)">测试</el-button>
@@ -76,6 +84,12 @@
                 <el-button size="small" @click="doAddNode">
                     <el-icon><Plus /></el-icon> 添加节点
                 </el-button>
+                <el-button size="small" type="primary" plain :loading="batchTesting" @click="doBatchTest">
+                    一键连通检测
+                </el-button>
+                <el-tag v-if="batchSummary" size="small" :type="batchOkCount === batchTotalCount ? 'success' : 'warning'" style="margin-left:4px">
+                    {{ batchSummary }}
+                </el-tag>
                 <span class="ns-hint">
                     节点行的顺序决定分片号：第 1 行 = 分片 2，第 2 行 = 分片 3，以此类推
                 </span>
@@ -162,6 +176,11 @@ function doClearActive() {
 // ── 节点列表 ─────────────────────────────────────────────────────────────────
 
 const testStatus = ref<Record<number, 'ok' | 'err' | 'ing'>>({})
+const latencyMs = ref<Record<number, number | null>>({})
+const batchTesting = ref(false)
+const batchSummary = ref('')
+const batchOkCount = ref(0)
+const batchTotalCount = ref(0)
 
 function doAddNode() {
     if (!selectedId.value) return
@@ -185,7 +204,7 @@ function onNodeChanged() {
     testStatus.value = {}
 }
 
-/** 向该节点发一个无害的 query_account 请求验证可达性 */
+/** 向该节点发一个无害的 query_account 请求验证可达性，同时测量延迟 */
 async function doTestNode(idx: number) {
     const node = selectedProfile.value?.nodes[idx]
     if (!node?.host || !node?.port) {
@@ -194,20 +213,44 @@ async function doTestNode(idx: number) {
     }
     testStatus.value = { ...testStatus.value, [idx]: 'ing' }
     const url = `http://${node.host}:${node.port}/query_account`
+    const t0 = Date.now()
     try {
         const resp = await axios.post(url, qs.stringify({ address: '0'.repeat(40) }), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             timeout: 5000,
             responseType: 'text',
         })
+        const ms = Date.now() - t0
         // 节点返回任何文本（哪怕"not found"）都说明连通了
         const ok = resp.status >= 200 && resp.status < 500
         testStatus.value = { ...testStatus.value, [idx]: ok ? 'ok' : 'err' }
-        ElMessage({ type: ok ? 'success' : 'error', message: ok ? `分片 ${idx + 2} 节点连通` : '节点无响应' })
+        latencyMs.value = { ...latencyMs.value, [idx]: ok ? ms : null }
+        ElMessage({ type: ok ? 'success' : 'error', message: ok ? `分片 ${idx + 2} 节点连通 (${ms}ms)` : '节点无响应' })
     } catch {
+        const ms = Date.now() - t0
         testStatus.value = { ...testStatus.value, [idx]: 'err' }
+        latencyMs.value = { ...latencyMs.value, [idx]: ms }
         ElMessage.error(`分片 ${idx + 2} 节点连接失败`)
     }
+}
+
+/** 并发测试所有节点，完成后显示"可用X/共Y节点"摘要 */
+async function doBatchTest() {
+    const nodes = selectedProfile.value?.nodes
+    if (!nodes || nodes.length === 0) {
+        ElMessage.warning('当前配置集没有节点')
+        return
+    }
+    batchTesting.value = true
+    batchSummary.value = ''
+    await Promise.all(nodes.map((_, idx) => doTestNode(idx)))
+    const total = nodes.length
+    const ok = nodes.filter((_, idx) => testStatus.value[idx] === 'ok').length
+    batchOkCount.value = ok
+    batchTotalCount.value = total
+    batchSummary.value = `可用 ${ok} / 共 ${total} 节点`
+    batchTesting.value = false
+    ElMessage({ type: ok === total ? 'success' : ok > 0 ? 'warning' : 'error', message: batchSummary.value })
 }
 </script>
 
